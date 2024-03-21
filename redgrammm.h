@@ -143,47 +143,48 @@ void afficher_arbre(Noeud *racine, int niveau)
 
 Noeud *construire_arbre(char *requete)
 {
-    char *token = strtok(requete, " \t\n");                            // Sépare la requête en tokens en utilisant les espaces, les tabulations et les sauts de ligne comme délimiteurs
-    Noeud *racine = creer_noeud(DEBUT, "start", token, strlen(token)); // Crée un nœud pour le début de la requête
-    Noeud *courant = racine;                                           // Initialise le nœud courant à la racine
+    char *start = strstr(requete, "start");
+    Noeud *racine = creer_noeud(DEBUT, "start", start, strlen("start"));
+    Noeud *courant = racine;
+
+    char *token = strtok(start + strlen("start"), " \t\n-_");
 
     while (token != NULL)
     {
         Noeud *n;
+
         if (strcmp(token, "start") == 0)
         {
-            // Ignore le token "start" car nous l'avons déjà ajouté à la racine
+            token = strtok(NULL, " \t\n-_");
+            continue;
+        }
+        else if (strchr(",.!?:", token[0]) != NULL)
+        {
+            n = creer_noeud(PONCTUATION, token, token, strlen(token));
+        }
+        else if (strchr(" \t\n-_", token[0]) != NULL)
+        {
+            n = creer_noeud(SEPARATEUR, token, token, strlen(token));
         }
         else if (strcmp(token, "fin") == 0)
         {
             n = creer_noeud(FIN, "fin", token, strlen(token));
             ajouter_frere(courant, n);
-            break; // Sort de la boucle car nous avons atteint la fin de la requête
+            break;
         }
         else if (isdigit(token[0]))
         {
-            // Token est un nombre
             n = creer_noeud(NOMBRE, token, token, strlen(token));
-            ajouter_fils(courant, n);
         }
         else
         {
-            // Token est un mot
             n = creer_noeud(MOT, token, token, strlen(token));
-            ajouter_fils(courant, n);
         }
 
-        token = strtok(NULL, " \t\n"); // Passe au prochain token
+        ajouter_fils(courant, n); // Creation du fils
+        courant = n;              // On descend d'un niveau
 
-        // Si le token suivant est un séparateur, l'ajouter comme frère du nœud courant
-        if (token != NULL && strchr(",.!?:", token[0]) != NULL)
-        {
-            Noeud *separateur = creer_noeud(SEPARATEUR, token, token, strlen(token));
-            ajouter_frere(n, separateur);
-            token = strtok(NULL, " \t\n"); // Passe au prochain token
-        }
-
-        courant = n; // Met à jour le nœud courant
+        token = strtok(NULL, " \t\n-_"); // On passe au token suivant
     }
 
     return racine;
