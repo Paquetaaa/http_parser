@@ -3,6 +3,13 @@
 #include <string.h>
 #include <_ctype.h>
 
+// ABNF TEST
+/*SEPARATEUR*/
+/*" \t\n-_"*/
+
+/*PONCTUATION*/
+/*"," / "." / "!" / "?" / ":"*/
+
 typedef enum
 {
     DEBUT,
@@ -50,18 +57,18 @@ Noeud *creer_noeud(TypeNoeud type, char *word, char *pointeur_debut, int length)
 
 void ajouter_noeud(Noeud *racine, Noeud *n)
 {
-    if (racine->fils_aine == NULL)
+    if (racine->fils_aine == NULL) // Si le noeud n'a pas de fils.
     {
         racine->fils_aine = n;
     }
     else
     {
         Noeud *p = racine->fils_aine;
-        while (p->frere != NULL)
+        while (p->frere != NULL) // Tant qu'on parcourt les freres du noeud,
         {
-            p = p->frere;
+            p = p->frere; // on avance au frere suivant
         }
-        p->frere = n;
+        p->frere = n; // Puis on ajoute n en tant que frere du dernier frere.
     }
 }
 
@@ -143,9 +150,9 @@ void afficher_arbre(Noeud *racine, int niveau)
 
 Noeud *construire_arbre(char *requete)
 {
-    char *start = strstr(requete, "start");
-    Noeud *racine = creer_noeud(DEBUT, "start", start, strlen("start"));
-    Noeud *courant = racine;
+    char *start = strstr(requete, "start");                              // strstr va chercher la sous-chaine "start" dans la chaine requete
+    Noeud *racine = creer_noeud(DEBUT, "start", start, strlen("start")); // Creation du noeud racine, contient "start"
+    Noeud *courant = racine;                                             // Noeud courant, départ de l'arbre
 
     char *token = strtok(start + strlen("start"), " \t\n-_");
 
@@ -158,7 +165,7 @@ Noeud *construire_arbre(char *requete)
             token = strtok(NULL, " \t\n-_");
             continue;
         }
-        else if (strchr(",.!?:", token[0]) != NULL)
+        else if (strchr(",.!?:", token[0]) != NULL) // strchr() trouve la première occurrence du caractère dans la chaîne, puis renvoie un pointeur vers le caractère dans la chaîne.
         {
             n = creer_noeud(PONCTUATION, token, token, strlen(token));
         }
@@ -166,13 +173,13 @@ Noeud *construire_arbre(char *requete)
         {
             n = creer_noeud(SEPARATEUR, token, token, strlen(token));
         }
-        else if (strcmp(token, "fin") == 0)
+        else if (strcmp(token, "fin") == 0) // Ne fonctionne pas si le mot se termine par "[mot]fin"
         {
             n = creer_noeud(FIN, "fin", token, strlen(token));
             ajouter_frere(courant, n);
             break;
         }
-        else if (isdigit(token[0]))
+        else if (isnumber(token[0])) // Pas capable de reconnaitre des nombres
         {
             n = creer_noeud(NOMBRE, token, token, strlen(token));
         }

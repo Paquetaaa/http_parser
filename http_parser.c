@@ -13,21 +13,47 @@ void lire_et_analyser_requete(FILE *Fplecture)
         afficher_arbre(racine, 0);
     }
 }
+void run_test(void)
+{
+
+    char nom_fichier_debut[] = "test0.txt";
+    for (int i = 0; i < 10; i++)
+    {
+        printf(" test sur %s \n", nom_fichier_debut);
+
+        FILE *Fplecture = fopen(nom_fichier_debut, "r");
+
+        lire_et_analyser_requete(Fplecture);
+
+        fclose(Fplecture);
+
+        printf("\n");
+        printf("\n");
+
+        // blabla on fait les fonctions de test
+        nom_fichier_debut[4] = '0' + (i + 1) % 10;
+    }
+    char nom_fichier[] = "test10.txt";
+    for (int i = 10; i < 100; i++)
+    {
+        printf(" test sur %s \n", nom_fichier);
+
+        FILE *Fplecture = fopen(nom_fichier, "r");
+
+        lire_et_analyser_requete(Fplecture);
+
+        fclose(Fplecture);
+
+        // blabla on fait les fonctions de test
+        nom_fichier[5] = '0' + (i + 1) % 10;
+        nom_fichier[4] = '0' + (i + 1) / 10;
+    }
+}
 
 int main(int argc, char *argv[])
 {
 
-    if (argc != 2)
-    {
-        printf("usage: ./http_parser <test_file> \n");
-        return 1;
-    }
-
-    FILE *Fplecture = fopen(argv[1], "r");
-
-    lire_et_analyser_requete(Fplecture);
-
-    fclose(Fplecture);
+    run_test();
 
     return 0;
 }
