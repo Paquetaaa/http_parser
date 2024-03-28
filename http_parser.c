@@ -1,6 +1,10 @@
-#include <stdio.h>
-#include <string.h>
-#include "redgrammm.h"
+#include "struct_parser.h"
+
+/* Note :
+ * Le fichier http_parser.c contient toutes les fonctions utiles, et uniquement utiles, pour la grammaire complete.
+ * Le fichier http_parser.c est a vocation de ne plus contenir de main (au profit du fichier main.c).
+ * Il contiendra une routine main tant que la periode de tests est en cours. 
+*/
 
 void lire_et_analyser_requete(FILE *Fplecture)
 {
@@ -50,10 +54,35 @@ void run_test(void)
     }
 }
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]){
 
-    run_test();
+    int len = strlen(argv[1]);
+    const char delim = ' ';
+    char* word = (char*) malloc(len * sizeof(char));
+    char *word_a_jour = (char*) malloc(len * sizeof(char)); 
+    strncpy(word, argv[1], len);
+    strncpy(word_a_jour, word, len);
+
+    char* tok = strtok(word, &delim);
+
+    while(tok != NULL){
+        printf("tok : %s\n", tok);
+        printf("taille tok : %d\n", strlen(tok));
+        printf("ce qu'il reste du parametre : %s\n", word_a_jour);
+        sleep(1);
+        /*
+        if (strchr(".\n ", tok[0]) != NULL){
+            printf("%s", tok);
+        } else if (strcmp("Opex", tok) == 0){
+            printf("Tok !\n");
+        } else{
+            printf("C'est un mot !\n");
+        }
+        */
+        word_a_jour = word_a_jour + strlen(tok);
+        tok = strtok(NULL, &delim);
+        
+    }
 
     return 0;
 }
