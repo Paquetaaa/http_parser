@@ -6,10 +6,10 @@ main: http_parser.o struct_parser.o
 	$(COMP) http_parser.o struct_parser.o -o main $(EXTRA)
 
 http_parser.o: http_parser.c struct_parser.o
-	$(COMP) http_parser.c -o http_parser.o $(EXTRA)
+	$(COMP) -c http_parser.c -o http_parser.o $(EXTRA)
 
 struct_parser.o: struct_parser.c struct_parser.h $(HEADER_GRAM)
-	$(COMP) struct_parser.c -o struct_parser.o $(EXTRA)
+	$(COMP) -c struct_parser.c -o struct_parser.o $(EXTRA)
 
 test: main
 	./main
