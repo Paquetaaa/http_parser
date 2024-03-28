@@ -121,28 +121,36 @@ void afficher_arbre(Noeud *racine, int niveau)
     }
 }
 
+int isnumber(int n)
+{
+    return (n >= '0' && n <= '9');
+    printf("c'est un nombre \n");
+}
+
 Noeud *construire_arbre(char *requete)
 {
     char *start = strstr(requete, "start");                              // strstr va chercher la sous-chaine "start" dans la chaine requete
     Noeud *racine = creer_noeud(DEBUT, "start", start, strlen("start")); // Creation du noeud racine, contient "start"
     Noeud *courant = racine;                                             // Noeud courant, départ de l'arbre
-
+      
     char *token = strtok(start + strlen("start"), " \t\n-_");
+   
 
     while (token != NULL)
     {
         Noeud *n;
-
+        //printf("token ce round = %c \n",token[0]);
         if (strcmp(token, "start") == 0)
         {
             token = strtok(NULL, " \t\n-_");
+          
             continue;
         }
         else if (strchr(",.!?:", token[0]) != NULL) // strchr() trouve la première occurrence du caractère dans la chaîne, puis renvoie un pointeur vers le caractère dans la chaîne.
         {
             n = creer_noeud(PONCTUATION, token, token, strlen(token));
         }
-        else if (strchr(" \t\n-_", token[0]) != NULL)
+        else if (strchr(" \t\n_-", token[0]) != NULL)
         {
             n = creer_noeud(SEPARATEUR, token, token, strlen(token));
         }
@@ -152,9 +160,8 @@ Noeud *construire_arbre(char *requete)
             ajouter_frere(courant, n);
             break;
         }
-       /*
-       isnumber existe pas encore
-        else if (isnumber(token[0])) // Pas capable de reconnaitre des nombres
+
+        else if (isnumber(token[0])) // peut etre Pas capable de reconnaitre des nombres
         {
             n = creer_noeud(NOMBRE, token, token, strlen(token));
         }
@@ -162,10 +169,11 @@ Noeud *construire_arbre(char *requete)
         {
             n = creer_noeud(MOT, token, token, strlen(token));
         }
-       */
-
+       
         ajouter_fils(courant, n); // Creation du fils
         courant = n;              // On descend d'un niveau
+
+        //printf("token[0] = %d \n",token[0]);
 
         token = strtok(NULL, " \t\n-_"); // On passe au token suivant
     }
