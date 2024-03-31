@@ -571,17 +571,20 @@ bool is_ctext(char c)
 /*partial-URI = relative-part [ "?" query ]*/
 bool is_partial_uri(char* chaine)
 {
-     char* delimiteur = "? \t\n";
-    char* token = strtok(chaine,delimiteur);
+    char* recopie = strdup(chaine);
+    char* delimiteur = "? \t\n";
+    char* token = strtok(recopie,delimiteur);
     if(token == NULL || !is_relative_part(token)){
         return false;
     }
     token = strtok(NULL,delimiteur);
     if(token != NULL){
-        if(!is_query(token)){  // a check parce que j'ai l'impression que ca vérifie pas que dans le deuxieme cas
+        if(!is_query(token)){ 
+            free(recopie ) // a check parce que j'ai l'impression que ca vérifie pas que dans le deuxieme cas
             return false;       // on ai bien la relative part
         }
     }
+    free(recopie);
     return true; 
 }
 
@@ -596,8 +599,9 @@ bool is_partial_uri(char* chaine)
 /*protocol = protocol-name [ "/" protocol-version ]		*/
 bool is_protocol(char* chaine)
 {
+    char* recopie = strdup(chaine);
     char* delimiteur = "/ \t\n";
-    char* token = strtok(chaine,delimiteur);
+    char* token = strtok(recopie,delimiteur);
     if(token == NULL || !is_protocol_name(token)){
         return false;
     }
@@ -607,6 +611,7 @@ bool is_protocol(char* chaine)
             return false;
         }
     }
+    free(recopie);
     return true; 
 
 }
@@ -666,16 +671,26 @@ bool is_received_by(char* chaine)
         return true;
     }
     // même chose faut trouver avant le strtok comment je fais pour check que le premier
-    char* recopie = strdup(chaine);
-    char* delim = ":";
-    char* token = strtok(chaine,delim);
-    if(token == NULL || is_port(token)){
-        return false;
+    else{
+        char* recopie = strdup(chaine);
+        char* partie1 = NULL;
+        char* partie2 = NULL;
+        char* delim = ":\t\n";
+        char* token = strtok(recopie,delim);
+        if(token == NULL || is_port(token)){
+            return false;
+        }
+        strcpy(partie1,token);
+        token = strtok(NULL,delim);
+        if(token != NULL){
+            strcpy(partie2,token);
+        }
+        free(recopie);
+        return(is_uri_host(partie1) && is_port(partie2));
     }
-    // aussi ajouter pour vérifier le début
+    
+    
 }
-
-
 
 /*received-protocol = [ protocol-name "/" ] protocol-version*/
 // on vérifie que si il y a un / avant on a un protocol-name et apres un protocol version
@@ -683,32 +698,145 @@ bool is_received_by(char* chaine)
 // a vérifier parce que ca marche pas je pense
 bool is_received_protocol(char* chaine)
 {
-    char* separateur = "/";
-    char* token;
-    char* same = strdup(chaine);
-    token = strktok(chaine,separateur);
+    char* separateur = "/\t\n";
+    char* recopie = strdup(chaine);
+    char* token = strtok(recopie,separateur);
+    
+    char* partie1 = NULL;
+    char* partie2 = NULL;
     if(token == NULL){
         return is_protocole_version(chaine);
     }
-    if(token != NULL && is_protocole_version(token)){
-        return true;
+    else{
+        strcpy(partie1,token);
+        token = strtok(NULL,delimiteur);
+        if(token != NULL){
+            strcpy(partie2,token);
+        }
+        free(recopie);
+        return(is_protocole_name(partie1) && is_protocole_version(partie2));
+
+    }
+    
+}
+
+
+
+/* rank = ( "0" [ "." *3DIGIT ] ) / ( "1" [ "." *3"0" ] )		*/
+bool is_rank(char* chaine)
+{
+    int taille = strlen(chaine);
+    if(chaine[0] == '0') {
+        if(taille == 1) {
+            return true;
+        } else {
+            if(chaine[1] == '.') {
+                for(int i = 2; i < taille; i += 3) {
+                    if(i + 2 < taille && !isdigit(chaine[i]) || !isdigit(chaine[i+1]) || !isdigit(chaine[i+2])) {
+                        return false;
+                    }
+                }
+                return true;
+            } else {
+                return false;
+            }
+        }
+    } else if(chaine[0] == '1') {
+        if(taille == 1) {
+            return true;
+        } else {
+            if(chaine[1] == '.') {
+                for(int i = 2; i < taille; i += 3) {
+                    if(i + 2 < taille && (chaine[i] != '0' || chaine[i+1] != '0' || chaine[i+2] != '0')) {
+                        return false;
+                    }
+                }
+                return true;
+            } else {
+                return false;
+            }
+        }
+    } else {
+        return false;
     }
 }
+
+
+
+
+
+
+
+
+/*t-codings = "trailers" / ( transfer-coding [ t-ranking ] )*/
+bool is_t_codings(char* chaine)
+{
+    if(!strcmp(chaine,"trailers")){
+        return true;
+    }
+    else{
+        // mais peut y avoir transfer coding et t-ranking donc faut séparer les deux et vérifier
+        char* delim = " ;";
+        char* recopie = strdup(chaine);
+        char* partie1 = malloc(sizeof(recopie) + 1);
+        char* token = strtok(recopie,delim);
+        if(token == NULL){
+            free(recopie);
+            free(partie1);
+            return is_transfer_coding(recopie);
+        }
+        else{
+            strcpy(partie1,token);
+            token = strtok(NULL,delim);
+            return(is_transfer_coding(partie1) && is_t_ranking(token));
+        }
+
+    }
+}
+/*t-ranking = OWS ";" OWS "q=" rank		*/
+bool is_t_ranking(char* chaine)
+{
+    char *partie1 = NULL;
+    char *partie2 = NULL;
+    char *partie3 = NULL;
+
+    char *recopie = strdup(chaine); 
+    char *delim = ";";
+
+    char *token = strtok(recopie, delim);
+    if (token == NULL) {
+        free(recopie);
+        return false;
+    }
+    partie1 = strdup(token);
+
+    token = strtok(NULL, delim);
+    if (token == NULL) {
+        free(partie1);
+        free(recopie);
+        return false;
+    }
+    partie2 = strdup(token);
+
+    token = strtok(NULL, "");
+    if (token != NULL) {
+        partie3 = strdup(token);
+    } else {
+        partie3 = strdup(""); 
+    }
+
+    free(recopie);
+
+    return (is_OWS(partie1) && is_OWS(partie2) && is_rank(partie3));
+}
+
+
+
 
 bool is_uri_host(char* chaine)
 {
     return is_host(chaine);    
 }
-
-
-
-
-
-
-
-
-
-
 
 bool is_content_location(char *chaine)
 {
