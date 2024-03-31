@@ -124,17 +124,24 @@ bool is_language(char* chaine)
                  ["-" region]
                  *("-" variant)
                  *("-" extension)
-                 ["-" privateuse]*/
+                 ["-" privateuse]
+                 donc on a forcement un langage, ptetre un script et une région, un certain nombre de variant
+                 un certain nombre d'extension
+                 et ptetre une privateuse
+                 j'utilise la même chose que ce qu'a fait lucas pour la grammaire simple
+                 */
 bool is_langtag(char* chaine)
 {
     int taille = strlen(chaine);
     int i = 0;
-    // on commence par vérifier que c'est un language
-    while((index < taille) && chaine[index] != '-'){
-        if(!is_language(chaine)){
-            return false;
-        }
+    char* delimiteur = "-";
+    char* token = strtok(chaine,delimiteur);
+    if(token == NULL || !is_language(token)){
+        return false;
     }
+    token = strtok(NULL,delimiteur);
+
+
 
 }
 
@@ -361,16 +368,29 @@ bool is_HTAB(char c)
     return c == '\t';
 }
 
-
-bool is_host(char* chaine)
+/*Host = uri-host [ ":" port ]	*/
+bool is_Host(char* chaine)
 {
-
+    char* delimiteur = ":";
+    char* token = strtok(chaine,delimiteur);
+    if(is_uri_host(chaine)){
+        return true;
+    }
+    if(token != NULL && is_port(token)){
+        return true;
+    }
+    if(token == NULL){
+        return false;
+    }
 }
 
 
 bool is_OWS(char *chaine)
 {
     int taille = strlen(chaine);
+    if(taille == 0){
+        return true;
+    }
     for (int index = 0; index < taille ; index++) {
         if (!is_SP(chaine[index]) && !is_HTAB(chaine[index])) {
             return false;
@@ -391,13 +411,8 @@ bool is_connection(char* chaine)
 {
     int taille = strlen(chaine);
     int index = 0;
-    while()
+    
 }
-
-
-
-
-
 
 
 
@@ -416,6 +431,13 @@ bool is_RWS(char* chaine)
 
     return true;
 }
+
+/*comment = "(" *( ctext / quoted-pair / comment ) ")"		*/
+bool is_comment(char* chaine)
+{
+
+}
+
 
 bool is_connection_option(char* chaine)
 {
@@ -492,15 +514,105 @@ bool is_token(char* chaine)
     return true;
 }
 
+/*trailer-part = *( header-field CRLF )		*/
+bool is_trailer_part(char* chaine)
+{
+    char* delimiteur = "\r\n";
+    char* token = strtok(chaine,delimiteur);
+    while(token != NULL){
+        if(!is_header_field(token)){
+            return false;
+        }
+        token = strtok(NULL,delimiteur);
+    }
+    return true;
+}
+
+/*transfer-coding = "chunked" / "compress" / "deflate" / "gzip" /			
+transfer-extension			
+transfer-extension = token *( OWS ";" OWS transfer-parameter )			
+transfer-parameter = token BWS "=" BWS ( token / quoted-string )			
+*/
+bool is_transfer_coding(char* chaine)
+{
+    return(!strcmp(chaine,"chunked") || !strcmp(chaine,"compress") || !strcmp(chaine,"deflate") || !strcmp(chaine,"gzip") || is_transfer_extension(chaine));
+}
+bool is_transfer_extension(char* chaine)
+{
+    if(!is_token(chaine[0])){
+        return false;
+    }
+    // pas fini
+
+}
+bool is_transfer_parameter(char* chaine)
+{
+    // pas fini
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*	ctext = HTAB / SP / %x21-27 ; '!'-'''			
+	/ %x2A-5B ; '*'-'['			
+	/ %x5D-7E ; ']'-'~'			
+	/ obs-text			*/
+
+bool is_ctext(char c)
+{
+    return(c == '\t' || c == ' ' || (c >= 0x21 && c <= 0x27) || (c >= 0x2A && c <= 0x5B) || (c >= 0x5D && c <= 0x7E) ||  (c >= 0x80 && c <= 0xFF));
+}
+
+
+/*protocol = protocol-name [ "/" protocol-version ]		*/
+bool is_protocol(char* chaine)
+{
+    char* delimiteur = "/ \t\n";
+    char* token = strtok(chaine,delimiteur);
+    if(token == NULL || !is_protocol_name(token)){
+        return false;
+    }
+    token = strtok(NULL,delimiteur);
+    if(token != NULL){
+        if(!is_protocole_version(token)){
+            return false;
+        }
+    }
+    return true; 
+
+}
+
 /*protocol-name = token
 protocol-version = token
 pseudonym = token c'est les mêmes*/
 
-bool is_protocole-name(char* chaine)
+bool is_protocole_name(char* chaine)
 {
     return is_token(chaine);
 }
-bool is_protocole-version(char* chaine)
+bool is_protocole_version(char* chaine)
 {
     return is_token(chaine);
 }
@@ -508,4 +620,67 @@ bool is_pseudonym(char* chaine)
 {
     return is_token(chaine);
 }
+/*qdtext = HTAB / SP / "!" / %x23-5B ; '#'-'['		
+/ %x5D-7E ; ']'-'~'		
+/ obs-text		*/
+bool is_qd_text(char c)
+{
+    return (c == '\t' || c == ' ' || c == '!' || (c >= 0x23 && c <= 0x5B) || (c >= 0x5D && c <= 0x7E) || (c >= 0x80 && c <= 0xFF));
+}
+/*quoted-pair = "\" ( HTAB / SP / VCHAR / obs-text )*/
+bool is_quoted_pair(char* chaine)
+{
+    if(&chaine[0] != '\\'){
+        return false;
+    }
+    else{
+        return(chaine[1] == '\t' || chaine[1] == ' ' ||(chaine[1] >= 0x33 && chaine[1] <= 0x126) ||(chaine[1] >= 0x80 && chaine[1] <= 0xFF));
+    }
+}
+/*quoted-string = DQUOTE *( qdtext / quoted-pair ) DQUOTE			*/
+bool is_quoted_string(char* chaine)
+{
+    int taille = strlen(chaine);
+    if(chaine[0] != '"' || chaine[taille - 1] != '"'){
+        return false;
+    }
+    for(int i = 1; i < taille -1; i++){
+        if(!is_qd_text(chaine[i]) && !is_quoted_pair(&chaine[i])){
+            return false;
+        }
+    }
+    return true;
 
+}
+
+
+
+bool is_uri_host(char* chaine)
+{
+    return is_host(chaine);    
+}
+
+
+
+
+
+
+
+
+
+
+
+bool is_content_location(char *chaine)
+{
+    return (is_absolute_uri(chaine) ||is_partial_uri(chaine));
+}
+
+bool is_content_type(char* chaine)
+{
+    return (is_media_type(chaine));
+}
+
+bool is_date(char* chaine)
+{
+    return is_http_date(chaine);
+}

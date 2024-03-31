@@ -42,8 +42,13 @@ bool is_content_length(char* chaine);
 
 bool is_tchar(char c);
 bool is_token(char* chaine);
+bool is_trailer_part(char* chaine);
 
+bool is_ctext(char c);
 
-bool is_protocole-name(char* chaine);
-bool is_protocole-version(char* chaine);
+bool is_protocol(char* chaine);
+bool is_protocole_name(char* chaine);
+bool is_protocole_version(char* chaine);
 bool is_pseudonym(char* chaine);
+bool is_qd_text(char c);
+bool is_quoted_pair(char* chaine);
