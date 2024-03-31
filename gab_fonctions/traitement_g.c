@@ -316,44 +316,46 @@ bool is_grandfathered(char * chaine)
 }
 
 /*pour regular et irregular c'est juste des grands cases*/
+// en fait non faut changer et faire des strcmp sad
 bool is_irregular(char* chaine)
 {
-    switch(chaine){
-        case("en-GB-oed"):  return true;
-        case("i-ami"):      return true;
-        case("i-bnn"):      return true;
-        case("i-default"):  return true;
-        case("i-enochian"): return true;
-        case("i-hak"):      return true;
-        case("i-klingon"):  return true;
-        case("i-lux"):      return true;
-        case("i-mingo"):    return true;
-        case("i-navajo"):   return true;
-        case("i-pwn"):      return true;
-        case("i-tao"):      return true;
-        case("i-tay"):      return true;
-        case("i-tsu"):      return true;
-        case("sgn-BE-FR"):  return true;
-        case("sgn-BE-NL"):  return true;
-        case("sgn-CH-DE"):  return true;
-        default:            return false;
-    }
+    int cas1 = strcmp(chaine,"en-GB-oed");
+    int cas2 = strcmp(chaine,"i-ami");
+    int cas3 = strcmp(chaine,"i-bnn");
+    int cas4 = strcmp(chaine,"i-default");
+    int cas5 = strcmp(chaine,"i-enochian");
+    int cas6 = strcmp(chaine,"i-hak");
+    int cas7 = strcmp(chaine,"i-klingon");
+    int cas8 = strcmp(chaine,"i-lux");
+    int cas9 = strcmp(chaine,"i-mingo");
+    int cas10 = strcmp(chaine,"i-navajo");
+    int cas11 = strcmp(chaine,"i-pwn");
+    int cas12 = strcmp(chaine,"i-tao");
+    int cas13 = strcmp(chaine,"i-tay");
+    int cas14 = strcmp(chaine,"i-tsu");
+    int cas15 = strcmp(chaine,"sgn-BE-FR");
+    int cas16 = strcmp(chaine,"sgn-BE-NL");
+    int cas17 = strcmp(chaine,"sgn-CH-DE");
+    return(!cas1 || !cas2 || !cas3 || !cas4 || !cas5 || !cas6 || !cas7 || !cas8 || !cas9 || !cas10 || !cas11 || !cas12
+    || !cas13 || !cas14 || !cas15 || !cas16 || !cas17);
+    
+    
 }
 
 bool is_regular(char* chaine)
 {
-    switch(chaine){
-        case("art-lojban"):  return true;
-        case("cel-gaulish"): return true;
-        case("no-bok"):      return true;
-        case("no-nyn"):      return true;
-        case("zh-guoyu"):    return true;
-        case("zh-hakka"):    return true;
-        case("zh-min"):      return true;
-        case("zh-min-nan"):  return true;
-        case("zh-xiang"):    return true;
-        default:             return false;
-    }
+    int cas1 = strcmp(chaine,"art-lojban");
+    int cas2 = strcmp(chaine,"cel-gaulish");
+    int cas3 = strcmp(chaine,"no-bok");
+    int cas4 = strcmp(chaine,"no-nyn");
+    int cas5 = strcmp(chaine,"zh-guoyu");
+    int cas6 = strcmp(chaine,"zh-hakka");
+    int cas7 = strcmp(chaine,"zh-min");
+    int cas8 = strcmp(chaine,"zh-min-nan");
+    int cas9 = strcmp(chaine,"zh-xiang");
+    return(!cas1 || !cas2 || !cas3 || !cas4 || !cas5 || !cas6 || !cas7 || !cas8 || !cas9 );
+    
+    
 
 }
 
@@ -555,26 +557,6 @@ bool is_transfer_parameter(char* chaine)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /*	ctext = HTAB / SP / %x21-27 ; '!'-'''			
 	/ %x2A-5B ; '*'-'['			
 	/ %x5D-7E ; ']'-'~'			
@@ -584,6 +566,31 @@ bool is_ctext(char c)
 {
     return(c == '\t' || c == ' ' || (c >= 0x21 && c <= 0x27) || (c >= 0x2A && c <= 0x5B) || (c >= 0x5D && c <= 0x7E) ||  (c >= 0x80 && c <= 0xFF));
 }
+
+
+/*partial-URI = relative-part [ "?" query ]*/
+bool is_partial_uri(char* chaine)
+{
+     char* delimiteur = "? \t\n";
+    char* token = strtok(chaine,delimiteur);
+    if(token == NULL || !is_relative_part(token)){
+        return false;
+    }
+    token = strtok(NULL,delimiteur);
+    if(token != NULL){
+        if(!is_query(token)){  // a check parce que j'ai l'impression que ca vérifie pas que dans le deuxieme cas
+            return false;       // on ai bien la relative part
+        }
+    }
+    return true; 
+}
+
+
+
+
+
+
+
 
 
 /*protocol = protocol-name [ "/" protocol-version ]		*/
@@ -652,8 +659,41 @@ bool is_quoted_string(char* chaine)
     return true;
 
 }
+/*received-by = ( uri-host [ ":" port ] ) / pseudonym*/
+bool is_received_by(char* chaine)
+{
+    if(is_pseudonym(chaine)){
+        return true;
+    }
+    // même chose faut trouver avant le strtok comment je fais pour check que le premier
+    char* recopie = strdup(chaine);
+    char* delim = ":";
+    char* token = strtok(chaine,delim);
+    if(token == NULL || is_port(token)){
+        return false;
+    }
+    // aussi ajouter pour vérifier le début
+}
 
 
+
+/*received-protocol = [ protocol-name "/" ] protocol-version*/
+// on vérifie que si il y a un / avant on a un protocol-name et apres un protocol version
+// si on a rien on vérifie qu'on a juste un protocol-version
+// a vérifier parce que ca marche pas je pense
+bool is_received_protocol(char* chaine)
+{
+    char* separateur = "/";
+    char* token;
+    char* same = strdup(chaine);
+    token = strktok(chaine,separateur);
+    if(token == NULL){
+        return is_protocole_version(chaine);
+    }
+    if(token != NULL && is_protocole_version(token)){
+        return true;
+    }
+}
 
 bool is_uri_host(char* chaine)
 {
