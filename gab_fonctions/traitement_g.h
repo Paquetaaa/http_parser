@@ -1,14 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-#include <unistd.h>
-#include <stdbool.h>
-
 #include "redgrammm.h"
-
-/*mes fonctions, dans l'ordre de l'ABNF a peu près j'ai essayé*/
-
 bool is_unreserved(char c);
 bool is_gen_delims(char c);
 bool is_sub_delims(char c);
@@ -37,11 +27,13 @@ bool is_connection(char* chaine);
 bool is_RWS(char* chaine);
 bool is_comment(char* chaine);
 bool is_connection_option(char* chaine);
+bool is_http_URI(char* chaine);
 bool is_content_length(char* chaine);
 bool is_tchar(char c);
 bool is_token(char* chaine);
 bool is_trailer_part(char* chaine);
 bool is_transfer_coding(char* chaine);
+bool is_transfer_extension(char* chaine);
 bool is_transfer_parameter(char* chaine);
 bool is_ctext(char c);
 bool is_partial_uri(char* chaine);

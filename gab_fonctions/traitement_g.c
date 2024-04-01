@@ -142,7 +142,7 @@ bool is_langtag(char* chaine)
     token = strtok(NULL,delimiteur);
 
 
-
+    return true;
 }
 
 
@@ -271,7 +271,8 @@ singleton     = DIGIT               ; 0 - 9
                / %x61-77             ; a - w
                / %x79-7A             ; y - z
 */
-bool is_singleton(char c){
+bool is_singleton(char c)
+{
     return (is_number(c)|| (c >= 'A' && c <= 'W') || (c >= 'Y' && c <= 'Z') || (c >= 'a' && c <= 'w') || (c >= 'y' && c <= 'z')); 
 }
 /*privateuse    = "x" 1*("-" (1*8alphanum))			
@@ -413,6 +414,7 @@ bool is_connection(char* chaine)
 {
     int taille = strlen(chaine);
     int index = 0;
+    return true;
     
 }
 
@@ -437,7 +439,7 @@ bool is_RWS(char* chaine)
 /*comment = "(" *( ctext / quoted-pair / comment ) ")"		*/
 bool is_comment(char* chaine)
 {
-
+    return true;
 }
 
 
@@ -446,7 +448,16 @@ bool is_connection_option(char* chaine)
     return is_token(chaine);
 }
 
-
+/*https-URI = "https://" authority path-abempty [ "?" query ] [ "#"*/
+bool is_http_URI(char* chaine)
+{
+    if(strncmp(chaine,"htpps://",8) != 0){
+        return false;
+    }
+    else{
+        return true;
+    }
+}
 
 
 
@@ -539,17 +550,20 @@ bool is_transfer_coding(char* chaine)
 {
     return(!strcmp(chaine,"chunked") || !strcmp(chaine,"compress") || !strcmp(chaine,"deflate") || !strcmp(chaine,"gzip") || is_transfer_extension(chaine));
 }
+/*transfer-extension = token *( OWS ";" OWS transfer-parameter )			*/
 bool is_transfer_extension(char* chaine)
 {
     if(!is_token(chaine[0])){
         return false;
     }
     // pas fini
+    return true;
 
 }
 bool is_transfer_parameter(char* chaine)
 {
     // pas fini
+    return true;
 }
 
 
@@ -829,7 +843,6 @@ bool is_t_ranking(char* chaine)
 
     return (is_OWS(partie1) && is_OWS(partie2) && is_rank(partie3));
 }
-
 
 
 
