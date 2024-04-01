@@ -202,7 +202,7 @@ bool is_region(char *chaine)
         return (isalpha(chaine[0]) && isalpha[chaine[1]]);
     } 
     else if(taille == 3){
-        return (isdigit(chaine[0]) && isdigit(chaine[1]) && isdigit(chaine[3]));
+        return (isdigit(chaine[0]) && isdigit(chaine[1]) && isdigit(chaine[2]));
     }
     else{
         return false;
