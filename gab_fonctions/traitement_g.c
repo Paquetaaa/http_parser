@@ -199,7 +199,7 @@ bool is_region(char *chaine)
 {
     int taille = strlen(chaine);
     if(taille == 2){
-        return (isalpha(chaine[0]) && isalpha[chaine[1]]);
+        return (isalpha(chaine[0]) && isalpha(chaine[1]));
     } 
     else if(taille == 3){
         return (isdigit(chaine[0]) && isdigit(chaine[1]) && isdigit(chaine[2]));
@@ -223,7 +223,7 @@ bool is_variant(char *chaine)
         }
         return true;
     }
-    else if(taille == 4 && isidigit(chaine[0])){
+    else if(taille == 4 && isdigit(chaine[0])){
         for(int i = 1; i < taille; i++){
             if(!isalnum(chaine[i])){
                 return false;
@@ -594,7 +594,7 @@ bool is_partial_uri(char* chaine)
     token = strtok(NULL,delimiteur);
     if(token != NULL){
         if(!is_query(token)){ 
-            free(recopie ) // a check parce que j'ai l'impression que ca vérifie pas que dans le deuxieme cas
+            free(recopie ); // a check parce que j'ai l'impression que ca vérifie pas que dans le deuxieme cas
             return false;       // on ai bien la relative part
         }
     }
@@ -656,7 +656,7 @@ bool is_qd_text(char c)
 /*quoted-pair = "\" ( HTAB / SP / VCHAR / obs-text )*/
 bool is_quoted_pair(char* chaine)
 {
-    if(&chaine[0] != '\\'){
+    if(&chaine[0] != "\\"){
         return false;
     }
     else{
@@ -723,7 +723,7 @@ bool is_received_protocol(char* chaine)
     }
     else{
         strcpy(partie1,token);
-        token = strtok(NULL,delimiteur);
+        token = strtok(NULL,separateur);
         if(token != NULL){
             strcpy(partie2,token);
         }
