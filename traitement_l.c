@@ -19,24 +19,124 @@ bool is_age(char c)
     return (is_delta_seconds(c));
 }
 
-bool is_Cache_Control(char c)
+bool is_Cache_Control(char *str)
 {
+    char *directive = strtok(str, ",");
+    while (*directive != NULL)
+    {
+        while (*directive == ' ')
+        {
+            directive++;
+        }
+        char *end = directive + strlen(directive) - 1;
+        while (end > directive && *end == ' ')
+        {
+            end--;
+        }
+
+        if (is_cache_directive(directive))
+        {
+            return false;
+        }
+
+        directive = strtok(NULL, ",");
+    }
+    return true;
 }
 bool is_Expires(char *chaine)
 {
     return (is_HTTP_date(chaine));
 }
 
-bool is_Pragma(char c) {}
-bool is_Warning(char c);
-bool is_cache_directive(char c);
+bool is_Pragma(char *str)
+{
+    char *directive = strtok(str, ",");
+    while (*directive != NULL)
+    {
+        while (*directive == ' ')
+        {
+            directive++;
+        }
+        char *end = directive + strlen(directive) - 1;
+        while (end > directive && *end == ' ')
+        {
+            end--;
+        }
+
+        if (is_pragma_directive(directive))
+        {
+            return false;
+        }
+
+        directive = strtok(NULL, ",");
+    }
+    return true;
+}
+bool is_Warning(char *str)
+{
+    char *directive = strtok(str, ",");
+    while (*directive != NULL)
+    {
+        while (*directive == ' ')
+        {
+            directive++;
+        }
+        char *end = directive + strlen(directive) - 1;
+        while (end > directive && *end == ' ')
+        {
+            end--;
+        }
+
+        if (is_warning_value(directive))
+        {
+            return false;
+        }
+
+        directive = strtok(NULL, ",");
+    }
+    return true;
+}
+bool is_cache_directive(char *str)
+{
+    // On recupere le premier token
+    char *token = strtok(str, "=");
+    if (token == NULL || !is_token(token))
+    {
+        return false;
+    }
+
+    token = strtok(NULL, "=");
+    if (token != NULL && !is_token(token) && !is_quoted_string(token))
+    {
+        return false;
+    }
+
+    return true;
+}
 
 bool is_delta_seconds(char c)
 {
     return (isdigit(c));
 }
 
-bool is_extension_pragma(char c);
+bool is_extension_pragma(char *str)
+{
+    // On recupere le premier token
+    char *token = strtok(str, "=");
+    if (token == NULL || !is_token(token))
+    {
+        return false;
+    }
+    // Commence bien par un token valide
+
+    token = strtok(NULL, "=");
+    if (token != NULL && !is_token(token) && !is_quoted_string(token))
+    {
+        return false;
+    }
+
+    return true;
+}
 
 bool is_pragma_directive(char *str)
 {
@@ -46,8 +146,24 @@ bool is_pragma_directive(char *str)
     }
     return false;
 }
+// warn-agent = ( uri-host [ ":" port ] ) / pseudonym
+bool is_warn_agent(char *str)
+{
 
-bool is_warn_agent(char c);
+    char *uri_host = strtok(str, ":");
+    if (uri_host == NULL || !is_uri_host(uri_host))
+    {
+        return is_pseudonym(str); // Cas ou c'est un pseudonyme
+    }
+
+    char *port = strtok(NULL, ":");
+    if (port != NULL && !is_port(port))
+    {
+        return false;
+    }
+
+    return true;
+}
 bool is_warn_code(char *chaine)
 {
     return (isdigit(chaine[0]) && isdigit(chaine[1]) && isdigit(chaine[2]));
@@ -73,22 +189,163 @@ bool is_warn_text(char *str)
 {
     return is_quoted_string(str);
 }
+// warning-value = warn-code SP warn-agent SP warn-text [ SP warn-date ]
 bool is_warning_value(char *str)
 {
+    char *warn_code = strtok(str, " ");
+    if (warn_code == NULL || !is_warn_code(warn_code))
+    {
+        return false;
+    }
+
+    char *warn_agent = strtok(NULL, " ");
+    if (warn_agent == NULL || !is_warn_agent(warn_agent))
+    {
+        return false;
+    }
+
+    char *warn_text = strtok(NULL, " ");
+    if (warn_text == NULL || !is_warn_text(warn_text))
+    {
+        return false;
+    }
+
+    char *warn_date = strtok(NULL, " ");
+    if (warn_date != NULL && !is_warn_date(warn_date)) // Cas ou on quelque chose ensuite mais c'est pas une W-date
+    {
+        return false;
+    }
+
+    return true;
 }
-bool is_Proxy_Authenticate(char c);
+bool is_Proxy_Authenticate(char *str)
+{
+    char *directive = strtok(str, ",");
+    while (*directive != NULL)
+    {
+        while (*directive == ' ')
+        {
+            directive++;
+        }
+        char *end = directive + strlen(directive) - 1;
+        while (end > directive && *end == ' ')
+        {
+            end--;
+        }
+
+        if (is_challenge(directive))
+        {
+            return false;
+        }
+
+        directive = strtok(NULL, ",");
+    }
+    return true;
+}
+
 bool is_Proxy_Authorization(char *str)
 {
     return is_credentials(str);
 }
-bool is_WWW_Authenticate(char c);
-bool is_auth_param(char c);
+bool is_WWW_Authenticate(char *str)
+{
+    char *directive = strtok(str, ",");
+    while (*directive != NULL)
+    {
+        while (*directive == ' ')
+        {
+            directive++;
+        }
+        char *end = directive + strlen(directive) - 1;
+        while (end > directive && *end == ' ')
+        {
+            end--;
+        }
+
+        if (is_challenge(directive))
+        {
+            return false;
+        }
+
+        directive = strtok(NULL, ",");
+    }
+    return true;
+}
+// auth-param = token BWS "=" BWS ( token / quoted-string )
+bool is_auth_param(char *str)
+{
+    return is_tranfer_parameter(*str);
+}
+
 bool is_auth_scheme(char c)
 {
     return (is_token(c));
 }
-bool is_challenge(char c);
-bool is_credentials(char c);
+// challenge = auth-scheme [ 1*SP ( token68 / [ ( "," / auth-param ) *( OWS "," [ OWS auth-param ] ) ] ) ]
+bool is_challenge(char *str)
+{
+    char *auth_scheme = strtok(str, " ");
+    if (auth_scheme == NULL || !is_auth_scheme(auth_scheme))
+    {
+        return false;
+    }
+
+    char *token68_or_params = strtok(NULL, " ");
+    if (token68_or_params != NULL)
+    {
+        if (is_token68(token68_or_params))
+        {
+            return true;
+        }
+        else
+        {
+            char *auth_param = strtok(token68_or_params, ",");
+            while (auth_param != NULL)
+            {
+                if (!is_auth_param(auth_param))
+                {
+                    return false;
+                }
+                auth_param = strtok(NULL, ",");
+            }
+        }
+    }
+
+    return true;
+}
+// credentials = auth-scheme [ 1*SP ( token68 / [ ( "," / auth-param ) *( OWS "," [ OWS auth-param ] ) ] ) ]
+bool is_credentials(char *str)
+{
+
+    char *auth_scheme = strtok(str, " ");
+    if (auth_scheme == NULL || !is_auth_scheme(auth_scheme))
+    {
+        return false;
+    }
+
+    char *token68_or_params = strtok(NULL, " ");
+    if (token68_or_params != NULL)
+    {
+        if (is_token68(token68_or_params))
+        {
+            return true;
+        }
+        else
+        {
+            char *auth_param = strtok(token68_or_params, ",");
+            while (auth_param != NULL)
+            {
+                if (!is_auth_param(auth_param))
+                {
+                    return false;
+                }
+                auth_param = strtok(NULL, ",");
+            }
+        }
+    }
+
+    return true;
+}
 
 bool is_Authorization(char *str)
 {
@@ -1091,34 +1348,52 @@ bool is_Cookie_header(char *str)
 
     return is_cookie && !ends_with_whitespace;
 }
-bool is_Cookie_string(char c);
-bool is_header_field(char *str)
+bool is_Cookie_string(char *str)
 {
-    return is_Connection_header(str) || is_Content_Length_header(str) || is_Cookie_header(str) || is_Transfer_Encoding_header(str) || is_Expect_header(str) || is_Host_header(str) || is_Accept_header(str) || is_Accept_Charset_header(str) || is_Accept_Encoding_header(str) || is_Accept_Language_header(str) || is_Referer_header(str) || is_User_Agent_header(str) || is_generic_header(str);
+    char *cookie_paire = strtok(str, ";");
+    while (cookie_paire != NULL)
+    {
+        while (cookie_paire == ' ')
+        {
+            cookie_paire++; // On avance le pointeur
+        }
+        if (!is_cookie_pair(cookie_paire))
+        {
+            return false;
+        }
+        cookie_paire = strtok(NULL, ";");
+    }
+    return true;
 }
-bool is_generic_header(char *str)
+bool is_field_name_header(char *str)
 {
-    char *colon = strchr(str, ':');
 
-    // Vérifie si un deux-points a été trouvé
-    if (colon == NULL)
+    if (strncmp(str, "field-name:", 11) != 0)
     {
         return false;
     }
 
-    // Vérifie l'espace blanc optionnel après le deux-points
-    char *field_value = colon + 1;
-    if (*field_value == ' ')
+    char *accept = str + 11;
+
+    while (*accept == ' ')
     {
-        field_value++;
+
+        accept++;
     }
 
-    // Vérifie l'espace blanc optionnel à la fin de la chaîne
-    if (str[strlen(str) - 1] == ' ')
-    {
-        str[strlen(str) - 1] = '\0';
-    }
+    bool is_accept = is_field_value(accept);
 
-    // Vérifie si le nom du champ et la valeur du champ sont non vides
-    return colon != str && *field_value != '\0';
+    char *end = accept + strlen(accept) - 1;
+    while (end > accept && *end == ' ')
+    {
+        end--;
+    }
+    bool ends_with_whitespace = end != accept + strlen(accept) - 1;
+
+    return is_accept && !ends_with_whitespace;
+}
+
+bool is_header_field(char *str)
+{
+    return is_Connection_header(str) || is_Content_Length_header(str) || is_Cookie_header(str) || is_Transfer_Encoding_header(str) || is_Expect_header(str) || is_Host_header(str) || is_Accept_header(str) || is_Accept_Charset_header(str) || is_Accept_Encoding_header(str) || is_Accept_Language_header(str) || is_Referer_header(str) || is_User_Agent_header(str) || is_field_name_header(str);
 }
