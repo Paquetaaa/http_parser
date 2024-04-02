@@ -448,13 +448,63 @@ bool is_connection_option(char* chaine)
     return is_token(chaine);
 }
 
-/*https-URI = "https://" authority path-abempty [ "?" query ] [ "#"*/
+/*https-URI = "https://" authority path-abempty [ "?" query ] [ "#"*/ 
+
 bool is_http_URI(char* chaine)
 {
-    if(strncmp(chaine,"htpps://",8) != 0){
+    if(strncmp(chaine, "http://", 7) != 0) {
         return false;
     }
-    else{
+    else {
+        char* authority = chaine + 7;
+        char *path_start = strchr(authority, '/');
+        if (path_start == NULL) {
+            path_start = authority + strlen(authority);
+        }
+
+        char *query_start = strchr(path_start, '?');
+        if (query_start != NULL) {
+            if (!is_query(query_start + 1)) { 
+                return false; 
+            }
+            path_start = query_start;
+        }
+        char *fragment_start = strchr(path_start, '#');
+        if (fragment_start != NULL) {
+            if (!is_fragment(fragment_start + 1)) { 
+                return false; 
+            }
+            path_start = fragment_start;
+        }
+        return true;
+    }
+}
+bool is_https_URI(char* chaine)
+{
+    if(strncmp(chaine, "https://", 8) != 0) {
+        return false;
+    }
+    else {
+        char* authority = chaine + 7;
+        char *path_start = strchr(authority, '/');
+        if (path_start == NULL) {
+            path_start = authority + strlen(authority);
+        }
+
+        char *query_start = strchr(path_start, '?');
+        if (query_start != NULL) {
+            if (!is_query(query_start + 1)) { 
+                return false; 
+            }
+            path_start = query_start;
+        }
+        char *fragment_start = strchr(path_start, '#');
+        if (fragment_start != NULL) {
+            if (!is_fragment(fragment_start + 1)) { 
+                return false; 
+            }
+            path_start = fragment_start;
+        }
         return true;
     }
 }
@@ -475,7 +525,43 @@ bool is_content_length(char* chaine)
     }
     return true;
 }
+bool is_TE(char* chaine)
+{
+    return true;
+}
+bool is_Trailer(char* chaine)
+{
+    return true;
+}
 
+bool is_Transfer_Encoding(char* chaine)
+{
+    return true;
+}
+bool is_transfer_extension(char* chaine)
+{
+    return true;
+}
+bool is_Accept(char* chaine)
+{
+    return true;
+}
+bool is_Accept_Charset(char* chaine)
+{
+    return true;
+}
+bool is_Accept_Encoding(char* chaine)
+{
+    return true;
+}
+bool is_Accept_Language(char* chaine)
+{
+    return true;
+}
+bool is_Allow(char* chaine)
+{
+    return true;
+}
 /*
 t-ranking = OWS ";" OWS "q=" rank			
 tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /			
@@ -601,11 +687,6 @@ bool is_partial_uri(char* chaine)
     free(recopie);
     return true; 
 }
-
-
-
-
-
 
 
 
