@@ -193,7 +193,7 @@ else if(is_byte_content_range(token))
     n = creer_noeud(RESERVED,"reserved",token,strlen(token));
 
 else if(is_byte_range(token))
-    n = creer_noeud(RESERVED,"reserved",token,strlen(token))
+    n = creer_noeud(RESERVED,"reserved",token,strlen(token));
 
 else if(is_byte_range_resp(token))
     n = creer_noeud(RESERVED,"reserved",token,strlen(token));
