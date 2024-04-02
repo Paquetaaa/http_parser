@@ -206,6 +206,7 @@ else if(is_byte_range_specifier(token))
 
 else if(is_byte_range_set(token))
     n = creer_noeud(RESERVED,"reserved",token,strlen(token));
+    
 else if (is_unsatisfied_range(token[0]))
 {
     n = creer_noeud(UNSATISFIED_RANGE, "unsatisfied-range", token, strlen(token));
