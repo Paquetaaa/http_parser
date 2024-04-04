@@ -9,15 +9,15 @@
 Noeud* creer_noeud(TypeNoeud type, char* etiquette, char* pointeur_debut, int longueur){
     Noeud* nd = (Noeud*) malloc(sizeof(Noeud));
     if (nd == NULL){
-        perror("Erreur malloc <creer_noeud>\n");
-        return EXIT_FAILURE;
+        fprintf(stderr, "Erreur malloc <creer_noeud>\n");
+        exit(1);
     }
 
     int taille_etiquette = strlen(etiquette);
     nd->etiquette = (char*) malloc(taille_etiquette * sizeof(char));
     if (nd->etiquette == NULL){
         perror("Erreur malloc <creer_noeud>\n");
-        return EXIT_FAILURE;
+        exit(1);
     }
 
     nd->type = type;
@@ -53,8 +53,8 @@ Noeud* chercher_noeud(Noeud* racine, char* mot, int longueur){
 
 void ajouter_fils(Noeud** nd, Noeud* fils){
     if (nd == NULL){
-        perror("Segfault <ajouter_fils>\n");
-        return;
+        fprintf(stderr, "Segfault <ajouter_fils>\n");
+        exit(1);
     }
 
     if (*nd == NULL){                       // Cas ou l'arbre est vide
@@ -70,17 +70,17 @@ void ajouter_fils(Noeud** nd, Noeud* fils){
             courant = courant->frere;                       
         }
         courant->frere = fils;
-        fils->pere = nd;
+        fils->pere = courant->pere;
     }
 }
 
 void ajouter_frere(Noeud** nd, Noeud* frere){
     if (nd == NULL){
-        perror("Segfault <ajouter_frere>\n");
-        return;
+        fprintf(stderr, "Segfault <ajouter_frere>\n");
+        exit(1);
     }
 
-    if (*nd == NULL){           // Das ou le noeud est vide
+    if (*nd == NULL){           // Cas ou le noeud est vide
         *nd = frere;
     } 
     else{                       // Sinon parcout la liste chainee des freres pour inserer le noueau a la fin
@@ -96,28 +96,29 @@ void ajouter_frere(Noeud** nd, Noeud* frere){
 
 
 void afficher_arbre_generique(Noeud* racine, int niveau){
-    if (racine == NULL){
+    Noeud* courant = racine;
+    if (courant == NULL){
         return;
     }
 
 // Affichage du noeud courant
-    Noeud* courant = racine;
-    char* contenu;
+    char contenu[courant->longueur];
     strncpy(contenu, courant->pointeur_debut, courant->longueur);
     printf("[%d : %s] = %s", niveau, courant->etiquette, contenu);
 
 // Affichage des freres du noeud courant
-    if (racine->frere != NULL){
+    if (courant->frere != NULL){
         printf("\t");
-        afficher_arbre(racine->frere, niveau);
+        afficher_arbre_generique(courant->frere, niveau);
     }
 
 // Descente recursive : on relance parmi les descendants
-    if (racine->fils_aine != NULL){
+    if (courant->fils_aine != NULL){
         printf("\n");
-        afficher_arbre(racine->fils_aine, niveau +1);
+        afficher_arbre_generique(courant->fils_aine, niveau +1);
     }
 
+    printf("\n");
     return;
 }
 
