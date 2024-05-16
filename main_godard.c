@@ -135,6 +135,9 @@ int main(int argc, char *argv[])
                             flag_err = true;
                             continue;
                         } 
+
+		// REGARDER LE PERCENT CODING (le fait d'avoir % au lieu des lettres)
+				
                     // Il faut eviter a tout prix le retour au dossier parent depuis une requete !
                         else if (request_target[0] == '.') {  
                             sendBadReponse("HTTP/1.1 400 OK\r\n", requete->clientId, requete->clientAddress);
@@ -145,7 +148,7 @@ int main(int argc, char *argv[])
                         request_target = strcat(prefixe_target,request_target);
                     /* TRAITEMENT DE LA REQUEST-TARGET : est-ce que le fichier demande existe ? De quel type est le fichier ? ... */
                     // Penser a utiliser la 'libmagic' (libmagic.so) pour avoir le type du fichier / gérer ce qu'on renvoie pour le content-type
-
+			// stat voire fopen()
                         free(request_target);
                     }
 
