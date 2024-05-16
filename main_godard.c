@@ -167,7 +167,8 @@ int main(int argc, char *argv[])
                         flag_err = true;
                         continue;
                     }
-
+		/* Trtement du ACCPET By Lucas*** */
+			
                 // Ensuite les headers Accept-*
                 // Commencons par Accept
                     purgeElement(&token);
