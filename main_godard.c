@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
 
                         request_target = getElementValue(token->node, &len_request_target);
 
-                        if (len_request_target > 8000) {    // On est cense supporter des request-line d'au moins 8 000 octets... on dira que c'est notre max pour la request-target
+                        if (len_request_target > 2000) {    // On est cense supporter des request-line d'au moins 8 000 octets... on dira que c'est notre max pour la request-target
                             sendBadReponse("HTTP/1.1 400 OK\r\n", requete->clientId, requete->clientAddress);
                             flag_err = true;
                             continue;
@@ -142,7 +142,7 @@ int main(int argc, char *argv[])
                             continue;
                         }
 
-                        request_target = strcat(request_target, prefixe_target);
+                        request_target = strcat(prefixe_target,request_target);
                     /* TRAITEMENT DE LA REQUEST-TARGET : est-ce que le fichier demande existe ? De quel type est le fichier ? ... */
                     // Penser a utiliser la 'libmagic' (libmagic.so) pour avoir le type du fichier / gérer ce qu'on renvoie pour le content-type
 
