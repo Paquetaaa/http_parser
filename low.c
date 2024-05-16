@@ -6,20 +6,20 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include "request.h"   
-
+#include "api.h"
 
 
 
 /* le nom des flags va changer biensur*/
-int v11; 
-int transfer_encoding;
+bool v11; 
+bool transfer_encoding;
 
-int flag_err;
+bool flag_err;
 int content_length_verif(_Token* node)
 {
-    char* cl = getElementValue(node,"Content_length");
+    char* cl = getElementValue(node->value,NULL);
     if(transfer_encoding){
-        return 0;
+        printf("Déjà transfert encoding, il faut pas de content-length \n");
     }
     // ya qu'un truc à vérifier à ce stade la : si yen a plusieurs faut que ce soit les mêmes et qu'elles soient toutes valides une par une
     char* cl_copy;
@@ -30,7 +30,7 @@ int content_length_verif(_Token* node)
     {
         for(int i = 0; i < strlen(token); i++){
             if(!isdigit(token[i])){
-                return 0;
+                printf("mauvaise valeur du champ content-length \n");
             }
         }
         int value = atoi(token);
@@ -38,7 +38,7 @@ int content_length_verif(_Token* node)
             premiere_valeur = value;
         }
         else if(premiere_valeur != value){
-            return 0;
+            printf("plusieurs valeurs différentes \n");
         }
         token = strtok(NULL,",");
     }
@@ -57,7 +57,7 @@ else {
 */
 int host_verif(_Token* node)
 {
-    const char* host = getElementValue(node, "Host");
+    const char* host = getElementValue(node->value,NULL);
         if (strlen(host) == 0) {
         return 0;
     }
@@ -66,6 +66,7 @@ int host_verif(_Token* node)
     strcpy(host_cpy,host);
     char* debut_port = strchr(host_cpy,':');
     // faut vérifier que le port c'est que des chiffres
+    
         
 }
 
