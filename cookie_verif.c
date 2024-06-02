@@ -86,6 +86,7 @@ typedef struct
     int secure;
     int http_only;
     int host_only;
+    char *max_age;
     time_t last_access_time;
 } Cookie;
 
@@ -93,6 +94,7 @@ Cookie *get_cookies_from_store();
 void update_last_access_time(Cookie *cookie);
 void cookie_header_verif(_Token *node);
 void update_last_access_time(Cookie *cookie);
+const char default_path[] = "/";
 
 // Magasin de Cookie, j'ai pas capté comment on allait le remplir.
 static Cookie cookie_store[] = {
@@ -110,10 +112,27 @@ void cookie_header_verif(_Token *node)
         return;
     }
 
+    // Check si le Cookie header apparait plus d'une fois. (MUSTNOT)
+    int cookie_header_count = 0;
+    _Token *current_node = node;
+    while (current_node != NULL)
+    {
+        if (strcmp(getElementName(current_node->node, NULL), "Cookie") == 0)
+        {
+            cookie_header_count++;
+        }
+        current_node = current_node->next;
+    }
+
+    if (cookie_header_count > 1)
+    {
+        fprintf(stderr, "Cookie header should not appear more than once\n");
+        return;
+    }
+
     // On récupère les cookies stockés dans le magasin
     Cookie *cookies = get_cookies_from_store();
     char header_value[4096] = "";
-    int first_cookie = 1;
 
     // On va vérifier si le cookie est valide.
 
@@ -134,6 +153,83 @@ void cookie_header_verif(_Token *node)
             char *request_host = /*A FAIRE*/ "";
             char *request_path = /*A FAIRE*/ "";
             int is_secure = strncmp(cookie_string, "https", 5) == 0;
+
+            if (cookie->secure)
+            {
+                // Ajoute l'attribut "Secure" à la liste des attributs du cookie
+                strcat(header_value, "; Secure");
+            }
+            if (cookie->http_only)
+            {
+                // Ajoute l'attribut "HttpOnly" à la liste des attributs du cookie
+                strcat(header_value, "; HttpOnly");
+            }
+            if (cookie->path)
+            {
+                // Si la valeur de l'attribut est vide ou si le premier caractère n'est pas '/',
+                // utilise le chemin par défaut.
+                if (cookie->path[0] == '\0' || cookie->path[0] != '/')
+                {
+                    cookie->path = default_path;
+                }
+
+                // Ajoute l'attribut "Path" à la liste des attributs du cookie
+                strcat(header_value, "; Path=");
+                strcat(header_value, cookie->path);
+            }
+            if (cookie->domain)
+            {
+                // Si la valeur de l'attribut est vide, ignore le cookie
+                if (cookie->domain[0] == '\0')
+                {
+                    continue;
+                }
+
+                // Si le premier caractère est '.', supprime le .
+                if (cookie->domain[0] == '.')
+                {
+                    memmove(cookie->domain, cookie->domain + 1, strlen(cookie->domain));
+                }
+
+                // Converti le domaine en minuscules
+                for (char *p = cookie->domain; *p; ++p)
+                {
+                    *p = tolower(*p);
+                }
+
+                // Ajoute l'attribut "Domain" à la liste des attributs du cookie
+                strcat(header_value, "; Domain=");
+                strcat(header_value, cookie->domain);
+            }
+            if (cookie->max_age)
+            {
+                // Si le premier caractère n'est pas un chiffre ou un '-', ignore le cookie
+                if (!isdigit(cookie->max_age[0]) && cookie->max_age[0] != '-')
+                {
+                    continue;
+                }
+
+                // Si le reste de la valeur de l'attribut contient un caractère non numérique, ignore le cookie
+                for (char *p = cookie->max_age + 1; *p; ++p)
+                {
+                    if (!isdigit(*p))
+                    {
+                        continue;
+                    }
+                }
+
+                // Convertis la valeur de l'attribut en un entier
+                int delta_seconds = atoi(cookie->max_age);
+
+                // Si delta_seconds est inférieur ou égal à zéro, définis expiry_time sur la date et l'heure les plus anciennes possibles
+                // Sinon, définis expiry_time sur la date et l'heure actuelles plus delta_seconds secondes
+                time_t expiry_time = delta_seconds <= 0 ? 0 : time(NULL) + delta_seconds;
+
+                // Ajoute l'attribut "Max-Age" à la liste des attributs du cookie
+                char max_age_str[20];
+                sprintf(max_age_str, "; Max-Age=%ld", (long)expiry_time);
+                strcat(header_value, max_age_str);
+            }
 
             if ((cookie->host_only && strcmp(request_host, cookie->domain) != 0) ||
                 (!cookie->host_only && !domain_matches(request_host, cookie->domain)) ||
@@ -159,7 +255,7 @@ void cookie_header_verif(_Token *node)
         cookie_start = cookie_end ? cookie_end + 1 : NULL;
     }
 
-    printf("Cookie-Header is semantically correct\n");
+    printf("Cookie-Header correct\n");
 }
 
 Cookie *get_cookies_from_store()
