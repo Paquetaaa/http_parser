@@ -81,3 +81,4 @@ char *valeur = getElementValue(token->node, &len_connection);
         flag_connection_keepalive = false;
     }
 
+purgeElement(&token);
