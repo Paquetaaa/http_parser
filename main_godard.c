@@ -2,6 +2,9 @@
 #include <stdlib.h> 
 #include <string.h> 
 #include <stdbool.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -9,7 +12,7 @@
 #include "api.h"   
 
 #define REPONSEGOOD "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n"
-#define REPONSEBAD "HTTP/1.0 400 OK\r\n\r\n"
+#define REPONSEBAD "HTTP/1.0 400 Bad Request\r\n\r\n"
 
 typedef enum methode {
     GET,
@@ -42,7 +45,9 @@ int main(int argc, char *argv[])
         bool flag_err = false;
         bool flag_v1_1 = true;                  // On part du principe qu'on encode le serveur sur une version HTTP/1.1...
         bool flag_connection_keepalive = true; // ... d'ou le keepalive par defaut
-			
+        struct stat file_stat;                  // Structure contenant les stats du fichier requete (champs "st_mode" & "st_size" interessants)
+        int f_size;
+
 
     // Verifie que le parser s'est execute correctement (et recupere la strcuture qu'il en sort par la meme occasion)
 		if ( parseur(requete->buf,requete->len) == 1 ) { 
@@ -59,15 +64,16 @@ int main(int argc, char *argv[])
                 
                 traiteMethode(token, &methode, requete, &flag_err);
 
-            // Regarde si lors du traitement une erreur n'a pas ete detectee
+            // Regarde si lors du traitement une erreur n'a pas ete detectee 
+            // (si tel est le cas : msg d'erreur deja envoye, on passe a une autre requete)
                 if (flag_err){
                     continue;
                 }
 
             } 
-        // La methode est obligatoirement presente dans la requete
+        // La methode est obligatoirement presente dans la requete (envoie une erreur en reponse si tel n'est pas le cas)
             else {
-                sendBadReponse("HTTP/1.1 400 OK\r\n", requete->clientId, requete->clientAddress);
+                sendBadReponse("HTTP/1.1 400 Bad Request\r\n", requete->clientId, requete->clientAddress);
                 flag_err = true;
                 continue;
             }
@@ -84,7 +90,7 @@ int main(int argc, char *argv[])
                     break;
 
                 case POST:  // La methode POST sera implementee plus tard
-                    sendBadReponse("HTTP/1.1 501 OK\r\n", requete->clientId, requete->clientAddress);
+                    sendBadReponse("HTTP/1.1 501 Not Iimplemented\r\n", requete->clientId, requete->clientAddress);
                     flag_err = true;
                     continue;
 
@@ -93,31 +99,23 @@ int main(int argc, char *argv[])
                 default:    // La methode GET etant celle utilisee a 90% du temps, on considerera celle-ci comme celle par defaut (si erreur, detectee au if precedent)
             
 
-            // ... puis la version HTTP de l'emetteur
+        // ... puis la version HTTP de l'emetteur
                     purgeElement(&token);
 
                     if ((token = searchTree(root, "HTTP-version")) != NULL) {
 
-                        char* version = getElementValue(token->node, NULL);
+                        traiteHTTPVersion(token, requete, &flag_v1_1, &flag_err);
 
-                    // Verifie que la majeure est bien 1 (si 0 ou 2 ou 3, version non supportee par le serveur)
-                        if (version[5] != '1') {
-                            sendBadReponse("HTTP/1.1 505 OK\r\n", requete->clientId, requete->clientAddress);     
-                            flag_err = true;
+                    // Regarde si lors du traitement une erreur n'a pas ete detectee 
+                    // (si tel est le cas : msg d'erreur deja envoye, on passe a une autre requete)
+                        if (flag_err){
                             continue;
-                        } 
-                    // Verifie la mineure de l'emetteur : si en HTTP/1.0, on doit renvoyer du 1.0 et non du 1.1 !
-                        else if (version[7] == '0') {     
-                            flag_v1_1 = false;  
-                        }                                   
-                    // Sinon, on est assure d'etre en HTTP/1.n ou n >= 1, donc on traite comme si c'etait du 1.1 =)
-
-                        free(version); 
-                    } else {
-                        sendBadReponse("HTTP/1.1 400 OK\r\n", requete->clientId, requete->clientAddress);
+                        }
+                    
+                    } else {    // La version HTTP est obligatoirement presente (message d'erreur si tel n'est pas le cas)
+                        sendBadReponse("HTTP/1.1 400 Bad Request\r\n", requete->clientId, requete->clientAddress);
                         flag_err = true;
                         continue;
-
                     }
 
                 // ... enfin la request-target (bien se rappeler que les ressources sont stockees dans /var/www/html/*)
@@ -130,27 +128,43 @@ int main(int argc, char *argv[])
 
                         request_target = getElementValue(token->node, &len_request_target);
 
-                        if (len_request_target > 8000) {    // On est cense supporter des request-line d'au moins 8 000 octets... on dira que c'est notre max pour la request-target
-                            sendBadReponse("HTTP/1.1 400 OK\r\n", requete->clientId, requete->clientAddress);
+                        if (len_request_target > 2000) {    // On est cense supporter des request-line d'au moins 8 000 octets... on dira que c'est notre max pour la request-target
+                            sendBadReponse("HTTP/1.1 501 Not Iimplemented\r\n", requete->clientId, requete->clientAddress);
                             flag_err = true;
                             continue;
                         } 
-                    // Il faut eviter a tout prix le retour au dossier parent depuis une requete !
-                        else if (request_target[0] == '.') {  
-                            sendBadReponse("HTTP/1.1 400 OK\r\n", requete->clientId, requete->clientAddress);
+
+                    // On effectue le percent-coding : on parse toute la request-target pour s'assurer que tous les caracteres sont ecrits formellement et pas avec %..
+                    // (transforme les %.. en caractere formel pour ensuite pouvoir effectuer les operations dessus sans soucis)
+
+                        // PERCENT CODING //
+
+
+                    // On effectue le dot-removal dans le but de ne pas pouvoir acceder a des repertoires parents par une requete mal intentionnee
+                        
+                        // DOT REMOVAL //
+
+
+                        request_target = strcat(prefixe_target, request_target); // devient "path_request_target" en quelques sortes
+
+                    // Traitement de la request-target...
+                    // ... d'abord on check si le fichier existe (avec stat(), on obtient des informations complementaires et si le retour est -1, le fichier n'existe pas)
+                        if ((stat(request_target, &file_stat)) == -1) {
+                            sendBadReponse("HTTP/1.1 400 Bad Request\r\n", requete->clientId, requete->clientAddress);
                             flag_err = true;
                             continue;
                         }
 
-                        request_target = strcat(request_target, prefixe_target);
-                    /* TRAITEMENT DE LA REQUEST-TARGET : est-ce que le fichier demande existe ? De quel type est le fichier ? ... */
-                    // Penser a utiliser la 'libmagic' (libmagic.so) pour avoir le type du fichier / gérer ce qu'on renvoie pour le content-type
+
+
+
+
 
                         free(request_target);
                     }
 
-                // Ensuite on peut traiter les 11 headers, dans un certain ordre (HOST, ACCEPT, CONTENT, OTHERS)  
-                // D'abord Host-header (on part sur Host par Host-header contient "Host" au debut, cela evite de re-parser completement la ligne)
+                // Ensuite on peut traiter les 13 headers, dans un certain ordre (HOST, ACCEPT, CONTENT, OTHERS)  
+                // D'abord Host-header (on part sur Host car Host-header contient la string "Host" au debut, cela evite de re-parser completement la ligne)
                     purgeElement(&token);
 
                     char* host;
@@ -163,7 +177,7 @@ int main(int argc, char *argv[])
                     }
                 // En version HTTP/1.1, le champs Host-header est le seul a etre obligatoirement present
                     else if (flag_v1_1 && token == NULL) {
-                        sendBadReponse("HTTP/1.1 400 OK\r\n", requete->clientId, requete->clientAddress);
+                        sendBadReponse("HTTP/1.1 400 Bad Request\r\n", requete->clientId, requete->clientAddress);
                         flag_err = true;
                         continue;
                     }
@@ -237,8 +251,8 @@ int main(int argc, char *argv[])
 
 // Routines secondaires 
 
-/**
- * 
+/** 
+ * Routine pour envoyer un message d'erreur a l'emetteur si la requete contient des erreurs
 */
 void sendBadReponse(char* buf, unsigned int clientId, struct sockaddr_in* clientAddress){
     message* reponse = (message*) malloc(sizeof(message));
@@ -253,7 +267,7 @@ void sendBadReponse(char* buf, unsigned int clientId, struct sockaddr_in* client
 }
 
 /**
- * 
+ * Routine qui se charge de traiter le champs METHODE de la requete
 */
 void traiteMethode(_Token* t, Methode* m, message* requete, bool* flag_err){
     if (strcmp("GET", getElementValue(t->node, NULL)) == 0) {
@@ -263,12 +277,31 @@ void traiteMethode(_Token* t, Methode* m, message* requete, bool* flag_err){
     } else if (strcmp("POST", getElementValue(t->node, NULL)) == 0) {    
         *m = POST;
     } else {
-        sendBadReponse("HTTP/1.1 400 \r\n", requete->clientId, requete->clientAddress);
+        sendBadReponse("HTTP/1.1 400 Bad Request\r\n", requete->clientId, requete->clientAddress);
         *flag_err = true;
     }
 }
 
+/**
+ * Routine qui se charge de traiter le champs HTTP-Version de la requete
+*/
+void traiteHTTPVersion(_Token* t, message* requete, bool* flag_v, bool* flag_err) {
 
+    char* version = getElementValue(t->node, NULL);
+
+// Verifie que la majeure est bien 1 (si 0 ou 2 ou 3, version non supportee par le serveur)
+    if (version[5] != '1') {
+        sendBadReponse("HTTP/1.1 505 HTTP Version Not Supported\r\n", requete->clientId, requete->clientAddress);     
+        *flag_err = true;
+    } 
+// Verifie la mineure de l'emetteur : si en HTTP/1.0, on doit renvoyer du 1.0 et non du 1.1 !
+    else if (version[7] == '0') {     
+        *flag_v = false;  
+    }                                   
+// Sinon, on est assure d'etre en HTTP/1.n ou n >= 1, donc on traite comme si c'etait du 1.1 =)
+
+    free(version); 
+}
 
 
 
