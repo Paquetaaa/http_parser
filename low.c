@@ -6,71 +6,79 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include "request.h"   
-#include "api.h"
 
 
+// Attention j'ai pas fait de fonction, faut juste rajouter tout ca dans le main  : //
 
 /* le nom des flags va changer biensur*/
-bool v11; 
-bool transfer_encoding;
-
+bool flag_v; 
+int transfer_encoding;
 bool flag_err;
-int content_length_verif(_Token* node)
-{
-    char* cl = getElementValue(node->value,NULL);
+
+// Partie Content Length
+  if ((token = searchTree(root, "Content_length")) != NULL) {
     if(transfer_encoding){
-        printf("Déjà transfert encoding, il faut pas de content-length \n");
+        printf("problème : content length et transfer_encoding \n");
+        flag_err = true;
+        continue;
+        //return 400;
     }
-    // ya qu'un truc à vérifier à ce stade la : si yen a plusieurs faut que ce soit les mêmes et qu'elles soient toutes valides une par une
-    char* cl_copy;
-    strcpy(cl_copy,cl);
-    char* token = strtok(contentLengthCopy, ","); // les différentes valeurs sont séparées par une ,
-    int premiere_valeur = -100000000;
-    while(token)
-    {
-        for(int i = 0; i < strlen(token); i++){
-            if(!isdigit(token[i])){
-                printf("mauvaise valeur du champ content-length \n");
+    if(token->next != NULL){ // Ya plusieurs content-length : faut qu'ils soient tous égayx
+        while(token)
+            {
+                int value = atoi(token);
+                if(premiere_valeur == -100000000){
+                    premiere_valeur = value;
+                }
+                else if(premiere_valeur != value){
+                    flag_err = true;
+                    printf("erreur dans les champs \n");
+                    //return 400;
+                    continue;
+                }
+                token = strtok(NULL,",");
             }
-        }
-        int value = atoi(token);
-        if(premiere_valeur == -100000000){
-            premiere_valeur = value;
-        }
-        else if(premiere_valeur != value){
-            printf("plusieurs valeurs différentes \n");
-        }
-        token = strtok(NULL,",");
     }
-    // si on a passé tout ça c'est que le content-length est valide
-    return 1;
+    // Si un seul, le parser a déjà vérifié que c'était correct donc est bon, le champ content length est bon
+    printf("Content Length vérifié, on est bien \n"); 
+    flag_err = false;
+  }
+                    
+
+// Partie Host : a partir de purge token 
+token = searchTree(root,"Host");
+if(token == NULL && flag_v){
+    printf("Pas de host alors qu'on est en 1.1 : erreur \n");
+    flag_err = true;
+    continue;
+    //return 400;
 }
-
-
-// fonction a appeler après :
-/*
-if ((_Token* h1 = searchTree(root,HOST)) == NULL) && v11) : faire une erreur , faut qu'il y en ai un
-else {
-    host_verif()
+if(token != NULL && token->next != NULL){ // Plusieurs hosts
+    printf("plusieurs hosts \n");
+    flag_err = true;
+    continue;
+    //return 400;
 }
+// Le parser s'occupe de vérifier si l'ip est valide ou si le nom est valide donc est bon pour l'host
+// Pareil si ya un port
 
-*/
-int host_verif(_Token* node)
-{
-    const char* host = getElementValue(node->value,NULL);
-        if (strlen(host) == 0) {
-        return 0;
+// Partie Connection header
+purgeElement(&token);
+
+int len_connection;
+token = searchTree(root,"Connection");
+char *valeur = getElementValue(token->node, &len_connection);
+    if(strcmp(valeur,"close") == 0){
+        flag_connection_keepalive = false;
     }
-    // on sépare le port de l'uri host
-    char* host_cpy;
-    strcpy(host_cpy,host);
-    char* debut_port = strchr(host_cpy,':');
-    // faut vérifier que le port c'est que des chiffres
-    
-        
-}
+    else if(flag_v){
+        flag_connection_keepalive = true;
+    }
+    else if (!flagv && (!strcmp(valeur,"keep-alive") || !strcmp(valeur,"Keep-Alive"))){
+        flag_connection_keepalive = true;
+    }
+    else {
+        flag_connection_keepalive = false;
+    }
 
-int connection_header_verif(_Token* arbre)
-{
-    return 0;
-}
+purgeElement(&token);
