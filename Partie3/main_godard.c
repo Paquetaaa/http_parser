@@ -375,16 +375,6 @@ int main(int argc, char *argv[])
                     cookie_header_verif(token, root);
                 }
 
-                // Puis Referer
-                // purgeElement(&token);
-
-                // ... //
-
-                // Puis User-Agent
-                // purgeElement(&token);
-
-                // ... //
-
                 // Puis Expect
                 purgeElement(&token);
                 if (token = searchTree(root, "Expect") != NULL)
