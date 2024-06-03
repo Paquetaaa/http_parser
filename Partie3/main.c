@@ -44,12 +44,12 @@ typedef struct
 // Cookie//
 Cookie *get_cookies_from_store();
 void update_last_access_time(Cookie *cookie);
-void cookie_header_verif(_Token *node, _Token *root);
+void cookie_header_verif(_Token *node, _Token *root, bool* flag_err, char* path_target);
 void update_last_access_time(Cookie *cookie);
-const char default_path[] = "/var/www/html";
+bool path_matches(const char *request_path, const char *cookie_path);
+bool domain_matches(const char *request_host, const char *cookie_domain);
 
-// Expect//
-void expect_header_verif(_Token *node, bool flag_v1_1, char *message_body);
+const char default_path[] = "/var/www/html/";
 
 // Magasin de Cookie, j'ai pas capté comment on allait le remplir.
 static Cookie cookie_store[] = {
@@ -57,6 +57,11 @@ static Cookie cookie_store[] = {
     {"name2", "value2", "domain2", "path2", false, true, false, "Max_age2", 0},
     {NULL, NULL, NULL, NULL, 0, 0} // Sentinelle.
 };
+
+
+// Expect//
+void expect_header_verif(_Token *node, bool flag_v1_1, char *message_body);
+
 
 void sendBadReponse(char *buf, unsigned int clientId, struct sockaddr_in *clientAddress);
 void traiteMethode(_Token *t, Methode *m, message *requete, bool *flag_err);
@@ -131,7 +136,7 @@ int main(int argc, char *argv[])
             switch (methode)
             {
             case POST: // La methode POST sera implementee plus tard
-                sendBadReponse("HTTP/1.1 501 Not Iimplemented\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                sendBadReponse("HTTP/1.1 501 Not Implemented\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
                 flag_err = true;
                 continue;
 
@@ -142,13 +147,18 @@ int main(int argc, char *argv[])
                 // ... puis la version HTTP de l'emetteur
                 purgeElement(&token);
 
-                if ((token = searchTree(root, "HTTP-version")) != NULL)
+                if ((token = searchTree(root, "HTTP_version")) != NULL)
                 {
 
                     traiteHTTPVersion(token, requete, &flag_v1_1, &flag_err);
 
-                    // Regarde si lors du traitement une erreur n'a pas ete detectee
-                    // (si tel est le cas : msg d'erreur deja envoye, on passe a une autre requete)
+                // Changement du comportement par defaut de l'usage de la connexion (1.0 => close)
+                    if (!flag_v1_1) {
+                        flag_connection_keepalive = false;
+                    }
+
+                // Regarde si lors du traitement une erreur n'a pas ete detectee
+                // (si tel est le cas : msg d'erreur deja envoye, on passe a une autre requete)
                     if (flag_err)
                     {
                         freeRequest(requete);
@@ -157,7 +167,15 @@ int main(int argc, char *argv[])
                 }
                 else
                 { // La version HTTP est obligatoirement presente (message d'erreur si tel n'est pas le cas)
-                    sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                    if (!flag_connection_keepalive)
+                    {
+                        sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                        requestShutdownSocket(requete->clientId);
+                    } else {
+                        sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                    }
+                                                
+                    
                     flag_err = true;
                     freeRequest(requete);
                     continue;
@@ -166,18 +184,25 @@ int main(int argc, char *argv[])
                 // ... enfin la request-target (bien se rappeler que les ressources sont stockees dans /var/www/html/*)
                 purgeElement(&token);
 
-                char prefixe_target[] = "/var/www/html/";
-                char *request_target = "/";
-                int len_request_target = 1;
-                if ((token = searchTree(root, "request-target")) != NULL)
+                char *prefixe_target = "/var/www/html";
+                char *request_target;
+                int len_request_target;
+                if ((token = searchTree(root, "request_target")) != NULL)
                 {
 
                     request_target = getElementValue(token->node, &len_request_target);
 
                     if (len_request_target > 2000)
                     { // On est cense supporter des request-line d'au moins 8 000 octets... on dira que c'est notre max pour la request-target
-                        sendBadReponse("HTTP/1.1 501 Not Implemented\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        if (!flag_connection_keepalive)
+                        {
+                            sendBadReponse("HTTP/1.1 501 Not Implemented\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                            requestShutdownSocket(requete->clientId);
+                        } else {
+                            sendBadReponse("HTTP/1.1 501 Not Implemented\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        }
                         flag_err = true;
+                        freeRequest(requete);
                         continue;
                     }
 
@@ -185,34 +210,58 @@ int main(int argc, char *argv[])
                     // (transforme les %.. en caractere formel pour ensuite pouvoir effectuer les operations dessus sans soucis)
                     request_target = effectuePercentCoding(request_target, &len_request_target, &flag_err);
 
+                    if (flag_err) {
+                        if (!flag_connection_keepalive)
+                        {
+                            sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                            requestShutdownSocket(requete->clientId);
+                        } else {
+                            sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        }
+                        freeRequest(requete);
+                        continue;
+                    }
+
                     // On effectue le dot-removal dans le but de ne pas pouvoir acceder a des repertoires parents par une requete mal intentionnee
                     effectueDotRemoval(request_target, len_request_target, &flag_err);
 
                     if (flag_err)
                     { // S'assure que si une erreur a ete remontee, qu'elle soit correctement traitee
-                        sendBadReponse("HTTP/1.1 400 Bad Resquest\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        if (!flag_connection_keepalive)
+                        {
+                            sendBadReponse("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                            requestShutdownSocket(requete->clientId);
+                        } else {
+                            sendBadReponse("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        }
                         freeRequest(requete);
                         continue;
                     }
 
                     // Premiere concatenation pour former le chemin vers la target (maintenant que la request target est clean)
-                    path_request_target = strcat(prefixe_target, request_target);
+                    strcat(path_request_target, prefixe_target);
 
                     // On traite d'abord Host avant la fin du traitement de la request-target pour s'assurer que les dernieres erreurs dans la requete seront reperees
                     // (et car du Host besoin pour finaliser le chemin absolu)
                     // (on part sur Host car Host-header contient la string "Host" au debut, cela evite de re-parser completement la ligne)
                     purgeElement(&token);
 
-                    char *host = "";
-                    int len_host = 0;
+                    char *host;
+                    int len_host;
                     if ((token = searchTree(root, "Host")) != NULL)
                     {
 
-                        if (token != NULL && token->next != NULL)
+                        if (token->next != NULL)
                         { // Plusieurs hosts, erreur !
-                            sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                            if (!flag_connection_keepalive)
+                            {
+                                sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                                requestShutdownSocket(requete->clientId);
+                            } else {
+                                sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                            }
                             flag_err = true;
-                            free(requete);
+                            freeRequest(requete);
                             continue;
                         }
                         // Le parser s'occupe de vérifier si l'ip est valide ou si le nom est valide donc c'est bon pour l'host
@@ -226,7 +275,13 @@ int main(int argc, char *argv[])
                     // En version HTTP/1.1, le champs Host-header est le seul a etre obligatoirement present
                     else if (flag_v1_1 && token == NULL)
                     {
-                        sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        if (!flag_connection_keepalive)
+                        {
+                            sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                            requestShutdownSocket(requete->clientId);
+                        } else {
+                            sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        }
                         flag_err = true;
                         freeRequest(requete);
                         continue;
@@ -235,30 +290,60 @@ int main(int argc, char *argv[])
                     // Regarde (via une sorte de pattern maching) si le host rentre est correcte pour nous
                     // (pas obligatoire car le fichier ne sera pas ouvrable si de toutes manieres l'host ne veut rien dire pour nous)
 
-                    // ... //
+                        // ... //
 
                     // Seconde concatenation pour former le chemin vers la target (maintenant que le host a ete traite)
-                    path_request_target = strcat(path_request_target, host_filter);
+                    // (s'assure tout de meme que le host ait ete traite !)
+                    if (token != NULL) {
+                        strcat(path_request_target, "/");
+                        strcat(path_request_target, host_filter);
+                        strcat(path_request_target, "/");
+                    }
+                    strcat(path_request_target, request_target);
+
+                    // /!\ ATTENTION : LA VARIABLE $LD_LIBRARY_PATH S'EST RAJOUTEE AU DEBUT DE path_request_target !!!
 
                     // Traitement de la request-target...
-                    // ... d'abord on check si le fichier existe (avec stat(), on obtient des informations complementaires et si le retour est -1, le fichier n'existe pas)
-                    // ATTENTION : soit le fichier n'existe pas du tout, soit l'extension n'a juste pas ete precisee !
-                    if ((stat(path_request_target, &file_stat)) == -1)
-                    {
-
-                        // Utiliser la libmagic (importation de magic.h, compilation avec -lmagic, puis se referer a "$man 3 libmagic" - notamment magic_open() puis magic_file())
-
-                        sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                    if (strcmp(path_request_target, "/") == 0) {
+                        if (!flag_connection_keepalive)
+                        {
+                            sendBadReponse("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                            requestShutdownSocket(requete->clientId);
+                        } else {
+                            sendBadReponse("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        }
                         flag_err = true;
                         freeRequest(requete);
                         continue;
                     }
 
-                    // ... s'assure que le fichier, dont l'extention est forcement precisee, est soit un repertoire, soit un fichier regulier (donc il faudra regarder le type...)
-                    // PEUT-ETRE REMPLACER CELA PAR L'UTILISATION DE LA LIBMAGIC !? //
-                    if (!S_ISREG(file_stat.st_mode) && !S_ISDIR(file_stat.st_mode))
+                    // ... d'abord on check si le fichier existe (avec stat(), on obtient des informations complementaires et si le retour est -1, le fichier n'existe pas)
+                    // ATTENTION : soit le fichier n'existe pas du tout, soit l'extension n'a juste pas ete precisee !
+                    if ((stat(path_request_target, &file_stat)) == -1)
                     {
-                        sendBadReponse("HTTP/1.1 501 Not Implemented\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        if (!flag_connection_keepalive)
+                        {
+                            sendBadReponse("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                            requestShutdownSocket(requete->clientId);
+                        } else {
+                            sendBadReponse("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        }
+                        flag_err = true;
+                        freeRequest(requete);
+                        continue;
+                    }
+
+                    // ... s'assure que le fichier designe / ouvrable est bien un fichier regulier (on pourrait etendre renvoyer la liste des fichiers dispo dans un repertoire...)
+                    // (donc il faudra regarder le type...)
+                    if (!S_ISREG(file_stat.st_mode))
+                    {
+                        if (!flag_connection_keepalive)
+                        {
+                            sendBadReponse("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                            requestShutdownSocket(requete->clientId);
+                        } else {
+                            sendBadReponse("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        }
                         flag_err = true;
                         freeRequest(requete);
                         continue;
@@ -270,12 +355,17 @@ int main(int argc, char *argv[])
                     f_type = magic_file(file_magic, path_request_target);
 
                     magic_close(file_magic);
-                    free(request_target);
                 }
                 // La request-target est obligatoirement presente dans la start-line, elle fait au minimum "/"
                 else
                 {
-                    sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                    if (!flag_connection_keepalive)
+                    {
+                        sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                        requestShutdownSocket(requete->clientId);
+                    } else {
+                        sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                    }
                     flag_err = true;
                     freeRequest(requete);
                     continue;
@@ -294,20 +384,26 @@ int main(int argc, char *argv[])
 
                 // Regardons a present Content-Length
                 purgeElement(&token);
-                if ((token = searchTree(root, "Content-Length")) != NULL)
+                if ((token = searchTree(root, "Content_Length")) != NULL)
                 {
 
                     // Il ne doit pas y avoir les header-fields Content-Length et Transfer-Encoding en meme temps
-                    if (searchTree(root, "Transfer-Encoding") != NULL)
+                    if (searchTree(root, "Transfer_Encoding") != NULL)
                     {
-                        sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        if (!flag_connection_keepalive)
+                        {
+                            sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                            requestShutdownSocket(requete->clientId);
+                        } else {
+                            sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        }
                         flag_err = true;
-                        free(requete);
+                        freeRequest(requete);
                         continue;
                     }
 
                     if (token->next != NULL)
-                    { // Y'a plusieurs content-length : faut qu'ils soient tous égayx
+                    { // Y'a plusieurs content-length : faut qu'ils soient tous égaux
                         while (token != NULL)
                         {
                             int value = atoi(getElementValue(token->node, NULL));
@@ -320,27 +416,33 @@ int main(int argc, char *argv[])
 
                             else if (premiere_valeur != value)
                             {
-                                sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                                if (!flag_connection_keepalive)
+                                {
+                                    sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                                    requestShutdownSocket(requete->clientId);
+                                } else {
+                                    sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                                }
                                 flag_err = true;
-                                free(requete);
+                                freeRequest(requete);
                                 continue;
                             }
                             token = token->next;
                         }
                     }
-                    // Si un seul, le parser a déjà vérifié que c'était correct donc c'est bon, le champ content length est bon
+                    // Si un seul de present, le parser a déjà vérifié que c'était correct donc c'est bon, le champ content-length est bon
                 }
 
                 // Puis Content-Type
                 // purgeElement(&token);
 
-                // ... //
+                    // ... //
 
                 // A present regardons Transfer-Encoding (a ignorer pour une version anterieure au 1.1)
                 purgeElement(&token);
-                if ((token = searchTree(root, "Transfer-Encoding")) != NULL && flag_v1_1)
+                if ((token = searchTree(root, "Transfer_Encoding")) != NULL && flag_v1_1)
                 {
-                    _Token *transfer_codings = searchTree(token, "transfert-coding");
+                    _Token *transfer_codings = searchTree(token, "transfert_coding");
 
                     // Regarde tous les transfer-codings qui ont ete utilise (si le header est present, il doit y en avoir au moins 1)
                     for (_Token *i = transfer_codings->node; i != NULL; i = i->next)
@@ -371,7 +473,19 @@ int main(int argc, char *argv[])
                 purgeElement(&token);
                 if ((token = searchTree(root, "Cookie")) != NULL)
                 {
-                    cookie_header_verif(token, root);
+                    cookie_header_verif(token, root, &flag_err, path_request_target);
+
+                    if (flag_err) {
+                        if (!flag_connection_keepalive)
+                        {
+                            sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                            requestShutdownSocket(requete->clientId);
+                        } else {
+                            sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        }
+                        freeRequest(requete);
+                        continue;
+                    }
                 }
 
                 // Puis Expect
@@ -384,7 +498,7 @@ int main(int argc, char *argv[])
 
                 // Enfin Connection
                 purgeElement(&token);
-                if ((token = searchTree(root, "connection-option")) != NULL)
+                if ((token = searchTree(root, "connection_option")) != NULL)
                 {
                     char *valeur_co = getElementValue(token, NULL);
 
@@ -399,9 +513,15 @@ int main(int argc, char *argv[])
                     }
                     else
                     {
-                        sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        if (!flag_connection_keepalive)
+                        {
+                            sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", requete->clientId, requete->clientAddress);
+                            requestShutdownSocket(requete->clientId);
+                        } else {
+                            sendBadReponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
+                        }
                         flag_err = true;
-                        free(requete);
+                        freeRequest(requete);
                         continue;
                     }
                 }
@@ -424,28 +544,25 @@ int main(int argc, char *argv[])
 
                 fclose(f_descripteur);
 
+                char *Date = "Date: ";
                 char *date;
                 effectueDatation(&date);
-                date = strcat("Date: ", date);
-                date = strcat(date, "\r\n");
-                writeDirectClient(requete->clientId, date, strlen(date));
+                strcat(Date, date);
+                strcat(Date, "\r\n");
+                writeDirectClient(requete->clientId, Date, strlen(date));
 
+                char* Content_Length = "Content-Length: ";
                 char *content_length = (char*) f_size;
-                content_length = strcat("Content-Length: ", content_length); // Ligne source d'erreur
-                content_length = strcat(content_length, "\r\n");
-                writeDirectClient(requete->clientId, content_length, strlen(content_length));
+                strcat(Content_Length, content_length); // Ligne source d'erreur
+                strcat(Content_Length, "\r\n");
+                writeDirectClient(requete->clientId, Content_Length, strlen(Content_Length));
 
                 char *content_type = "Content-Type: ";
-                content_type = strcat(content_type, f_type);
-                writeDirectClient(requete->clientId, content_type, strlen(content_length));
+                strcat(content_type, f_type);
+                strcat(content_type, "\r\n");
+                writeDirectClient(requete->clientId, content_type, strlen(content_type));
 
-                char *connection;
-                if (flag_connection_keepalive) {
-                    connection = "Connection: keep-alive\r\n";
-                } else {
-                    connection = "Connection: close\r\n";
-                }
-
+                char *connection = (flag_connection_keepalive ? "Connection: keep-alive\r\n" : "Connection: close\r\n");
                 writeDirectClient(requete->clientId, connection, strlen(connection));
 
                 writeDirectClient(requete->clientId, "\r\n", strlen("\r\n"));
@@ -461,7 +578,8 @@ int main(int argc, char *argv[])
         }
         else
         {
-            writeDirectClient(requete->clientId, REPONSEBAD, strlen(REPONSEBAD));
+            writeDirectClient(requete->clientId, "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n", strlen("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n"));
+            requestShutdownSocket(requete->clientId);
         }
 
         // Verifie s'il y a au moins une erreur lors du traitement de la requete (si oui, une BAD RESPONSE aura ete envoye, pas la peine d'envoyer le buffer contenant la GOOD RESPONSE)
@@ -506,15 +624,18 @@ void sendBadReponse(char *buf, unsigned int clientId, struct sockaddr_in *client
  */
 void traiteMethode(_Token *t, Methode *m, message *requete, bool *flag_err)
 {
-    if (strcmp("GET", getElementValue(t->node, NULL)) == 0)
+    char* methode = getElementValue(t->node, NULL);
+    methode = strtok(methode, " ");
+
+    if (strcmp("GET", methode) == 0)
     {
         *m = GET;
     }
-    else if (strcmp("HEAD", getElementValue(t->node, NULL)) == 0)
+    else if (strcmp("HEAD", methode) == 0)
     {
         *m = HEAD;
     }
-    else if (strcmp("POST", getElementValue(t->node, NULL)) == 0)
+    else if (strcmp("POST", methode) == 0)
     {
         *m = POST;
     }
@@ -538,6 +659,7 @@ void traiteHTTPVersion(_Token *t, message *requete, bool *flag_v, bool *flag_err
     {
         sendBadReponse("HTTP/1.1 505 HTTP Version Not Supported\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n", requete->clientId, requete->clientAddress);
         *flag_err = true;
+        return;
     }
     // Verifie la mineure de l'emetteur : si en HTTP/1.0, on doit renvoyer du 1.0 et non du 1.1 !
     else if (version[7] == '0')
@@ -545,8 +667,6 @@ void traiteHTTPVersion(_Token *t, message *requete, bool *flag_v, bool *flag_err
         *flag_v = false;
     }
     // Sinon, on est assure d'etre en HTTP/1.n ou n >= 1, donc on traite comme si c'etait du 1.1 =)
-
-    free(version);
 }
 
 /**
@@ -671,10 +791,10 @@ void effectueDatation(char **date)
     *date = __DATE__;
 }
 
-void cookie_header_verif(_Token *node, _Token *root)
+void cookie_header_verif(_Token *node, _Token *root, bool* flag_err, char* path_target)
 {
-    // On récupère la valeur du cookie gràce à la fonction getElementValue de l'api.
-    const char *cookie_string = getElementValue(node->node, NULL);
+    // On récupère la valeur du cookie grace à la fonction getElementValue de l'api.
+    char *cookie_string = getElementValue(node->node, NULL);
     if (cookie_string == NULL)
     {
         return;
@@ -694,7 +814,7 @@ void cookie_header_verif(_Token *node, _Token *root)
 
     if (cookie_header_count > 1)
     {
-        fprintf(stderr, "Cookie header should not appear more than once\n");
+        *flag_err = true;
         return;
     }
 
@@ -703,7 +823,6 @@ void cookie_header_verif(_Token *node, _Token *root)
     char header_value[4096] = "";
 
     // On va vérifier si le cookie est valide.
-
     char *cookie_start = cookie_string;
     while (cookie_start)
     {
@@ -718,9 +837,9 @@ void cookie_header_verif(_Token *node, _Token *root)
         // On check tous les cookies du magasin.
         for (int i = 0; cookies[i].name != NULL; i++)
         {
-            char *request_host = getElementValue(searchTree(root, "host"), NULL);
-            char *request_path = getElementValue(searchTree(root, "hist"), NULL);
-            int is_secure = strncmp(cookie_string, "https", 5) == 0;
+            char *request_host = getElementValue(searchTree(root, "Host"), NULL);
+            char *request_path = path_target;
+            int is_secure = (strncmp(cookie_string, "https", 5) == 0);
 
             // Ajoute le nom du cookie, le caractère '=' et la valeur du cookie à la chaîne de cookies
             strcat(header_value, cookies[i].name);
@@ -730,7 +849,7 @@ void cookie_header_verif(_Token *node, _Token *root)
             // Vérifie la taille du cookie
             if (strlen(header_value) > 4096)
             {
-                // fprintf(stderr, "Cookie size should not exceed 4096 bytes\n");
+                *flag_err = true;
                 return;
             }
 
@@ -806,7 +925,7 @@ void cookie_header_verif(_Token *node, _Token *root)
 
                 // Si delta_seconds est inférieur ou égal à zéro, définis expiry_time sur la date et l'heure les plus anciennes possibles
                 // Sinon, définis expiry_time sur la date et l'heure actuelles plus delta_seconds secondes
-                time_t expiry_time = delta_seconds <= 0 ? 0 : time(NULL) + delta_seconds;
+                time_t expiry_time = (delta_seconds <= 0 ? 0 : time(NULL) + delta_seconds);
 
                 // Ajoute l'attribut "Max-Age" à la liste des attributs du cookie
                 char max_age_str[20];
@@ -814,11 +933,11 @@ void cookie_header_verif(_Token *node, _Token *root)
                 strcat(header_value, max_age_str);
             }
 
-            if ((cookie->host_only_flag && strcmp(request_host, cookie->domain) != 0) ||
-                (!cookie->host_only_flag && !domain_matches(request_host, cookie->domain)) ||
-                !path_matches(request_path, cookie->path) ||
-                (cookie->secure && !is_secure) ||
-                (cookie->http_only_flag && strncmp(cookie_string, "HTTP", 4) != 0))
+            if ((cookie->host_only_flag && strcmp(request_host, cookie->domain) != 0) 
+                || (!cookie->host_only_flag && !domain_matches(request_host, cookie->domain)) 
+                || !path_matches(request_path, cookie->path) 
+                || (cookie->secure && !is_secure) 
+                || (cookie->http_only_flag && strncmp(cookie_string, "HTTP", 4) != 0))
             {
                 continue;
             }
@@ -826,7 +945,7 @@ void cookie_header_verif(_Token *node, _Token *root)
             // Vérifie si l'API est non-HTTP
             if (cookie->http_only_flag && strncmp(cookie_string, "HTTP", 4) != 0)
             {
-                // fprintf(stderr, "Cookie should not be included in non-HTTP API\n");
+                *flag_err = true;
                 return;
             }
 
@@ -834,9 +953,8 @@ void cookie_header_verif(_Token *node, _Token *root)
             break;
         }
 
-        if (!cookie)
+        if (!cookie)    // Ignore
         {
-            // fprintf(stderr, "Invalid cookie: %s\n", cookie_start);
             return;
         }
 
@@ -861,7 +979,7 @@ void update_last_access_time(Cookie *cookie)
 bool domain_matches(const char *request_host, const char *cookie_domain)
 {
     // On vérifie si le domaine de la requête est égal au domaine du cookie.
-    return strcmp(request_host, cookie_domain) == 0;
+    return (strcmp(request_host, cookie_domain) == 0);
 }
 
 bool path_matches(const char *request_path, const char *cookie_path)
@@ -872,24 +990,24 @@ bool path_matches(const char *request_path, const char *cookie_path)
 
 void expect_header_verif(_Token *node, bool flag_v1_1, char *message_body)
 
-// Si falg_v1 = TRue c'est du 1.1 sinon c'est 1.0.
+// Si falg_v1_1 = True c'est du 1.1 sinon c'est 1.0.
 
 {
-    char *expect_string = getElementValue(node->node, NULL);
+    //char *expect_string = getElementValue(node->node, NULL);
 
-    if (strcmp(expect_string, "Expect: 100-continue") != 0)
-    {
+    //if (strcmp(expect_string, "Expect: 100-continue") != 0)
+    //{
         // printf("Expected: Expect: 100-continue\n");
         // printf("Received: %s\n", expect_string);
-        exit(1);
-    }
+        //exit(1);
+    //}
 
     // Si le corps du message a déjà été reçu en partie ou en totalité, omet d'envoyer une réponse 100 (Continue)
-    if (message_body != NULL && strlen(message_body) > 0)
-    {
-        return;
-    }
+    //if (message_body != NULL && strlen(message_body) > 0)
+    //{
+        //return;
+    //}
 
     // Sinon, envoie une réponse 100 (Continue)
-    sendReponse("HTTP/1.1 100 Continue\n");
+    //sendReponse("HTTP/1.1 100 Continue\n");
 }
