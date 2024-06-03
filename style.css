@@ -1,0 +1,80 @@
+body {
+    margin: 0;
+    background-image: url('./Images/Mole_Torino.jpg');
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center;
+    /* VH=View Height,VW=View Width */
+    min-height: 100vh;
+    min-width: 100vh;
+
+
+
+    font-family: Arial, sans-serif;
+}
+
+
+
+h1 {
+    color: rgb(205, 148, 163);
+    text-align: center;
+    font: 1rem helvetica;
+    letter-spacing: 1px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    padding: 10px;
+    background-color: rgb(232 232 244);
+    border: 2px solid white;
+    border-radius: 10px;
+    box-shadow: 5px 5px 5px rgb(0, 0, 0);
+    text-shadow: 2px 2px 2px rgb(0, 0, 0);
+
+
+
+}
+
+main {
+    min-height: 200px;
+    height: 150px;
+    width: 90%;
+    background-color: rgba(255, 255, 255, 0.5);
+    margin: 0 auto;
+    border: 2px solid rgb(205, 148, 163);
+    border-radius: 20px;
+    padding: 15px;
+}
+
+.flexbox {
+    border: 1px solid rgb(80, 100, 160);
+    border-radius: 20px;
+    min-height: 200px;
+
+}
+
+.flexbox ul {
+    padding: 0;
+    display: flex;
+    justify-content: space-between;
+
+
+}
+
+.flexbox li {
+    list-style-type: none;
+    height: 60px;
+    width: 120px;
+    margin: 10px;
+    background-color: aliceblue;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 1px solid rgb(80, 100, 160);
+    border-radius: 10px;
+    box-shadow: 5px 5px 5px rgb(0, 0, 0);
+    color: rgb(80, 100, 160);
+
+
+
+
+
+}
