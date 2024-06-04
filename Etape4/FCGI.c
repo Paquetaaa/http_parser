@@ -14,6 +14,16 @@
 #include "api.h"
 #include "FCGI.h"
 
+void Create_and_Send_AbortRequest(int fd, unsigned short requestId);
+void Create_and_Send_BeginRequest(int fd, unsigned short requestId);
+void Create_and_Send_GetValuesRequest(int fd);
+void sendWebData(int fd, unsigned char type, unsigned short requestId, char *data, unsigned int len);
+size_t readSocket(int fd, char *buf, size_t len);
+void readData(int fd, FCGI_Header *h, size_t *len);
+int addNameValuePair(FCGI_Header *header, char *name, char *value);
+void writeSocket(int fd, FCGI_Header *h, unsigned int len);
+void writeLen(int len, char **p);
+
 // Création de la socket
 static int createSocket(char *ip, int port)
 {
@@ -42,17 +52,24 @@ static int createSocket(char *ip, int port)
     return fd;
 }
 
-void main(void)
+int main(void)
 {
 
     // Initialisation de la socket
     int fd = createSocket("127.0.0.1", 9000);
-    printf("Socket : %d\n", fd);
 
-    // Création du fichier pour écrire dans la socket.
-    FILE *fecriture = fopen(socket, "r+");
+    // Création de la requête FCGI_GET_VALUES
+    Create_and_Send_GetValuesRequest(fd);
 
-    fclose(fecriture);
+    // Création de la requête FCGI_BEGIN_REQUEST
+    Create_and_Send_BeginRequest(fd, 1);
+
+    // Création de la requête FCGI_ABORT_REQUEST
+
+    Create_and_Send_AbortRequest(fd, 1);
+
+    // Fermeture de la socket
+    close(fd);
 }
 // Lit les données de la socket
 size_t readSocket(int fd, char *buf, size_t len)
@@ -134,6 +151,20 @@ int addNameValuePair(FCGI_Header *header, char *name, char *value)
     return 0;
 }
 
+// Ecrit la taille de la requête
+void writeLen(int len, char **p)
+{
+    if (len > 0x7F)
+    {
+        *((*p)++) = (len >> 24) & 0x7F;
+        *((*p)++) = (len >> 16) & 0xFF;
+        *((*p)++) = (len >> 8) & 0xFF;
+        *((*p)++) = (len) & 0xFF;
+    }
+    else
+        *((*p)++) = (len) & 0x7F;
+}
+
 // On ecrit dans la socket
 void writeSocket(int fd, FCGI_Header *h, unsigned int len)
 {
@@ -189,7 +220,6 @@ void Create_and_Send_BeginRequest(int fd, unsigned short requestId)
     begin->flags = 0;             // Pas besoin de garder la connexion ouverte avec le serveur.
 
     writeSocket(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
-    return *header;
 }
 
 // Crée une requête de type FCGI_ABORT_REQUEST.
