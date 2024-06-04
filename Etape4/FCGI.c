@@ -14,16 +14,6 @@
 #include "api.h"
 #include "FCGI.h"
 
-void Create_and_Send_AbortRequest(int fd, unsigned short requestId);
-void Create_and_Send_BeginRequest(int fd, unsigned short requestId);
-void Create_and_Send_GetValuesRequest(int fd);
-void sendWebData(int fd, unsigned char type, unsigned short requestId, char *data, unsigned int len);
-size_t readSocket(int fd, char *buf, size_t len);
-void readData(int fd, FCGI_Header *h, size_t *len);
-int addNameValuePair(FCGI_Header *header, char *name, char *value);
-void writeSocket(int fd, FCGI_Header *h, unsigned int len);
-void writeLen(int len, char **p);
-
 // Création de la socket
 static int createSocket(char *ip, int port)
 {
