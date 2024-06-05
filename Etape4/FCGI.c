@@ -206,7 +206,7 @@ void sendWebData(int fd, unsigned char type, unsigned short requestId, char *dat
 {
     FCGI_Header *header = malloc(sizeof(FCGI_Header));
     if (len > FASTCGILENGTH) {
-        printf("Anrege frere \n");
+        printf("Abrege frere \n");
         return;
         
     }
