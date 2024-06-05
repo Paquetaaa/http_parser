@@ -206,7 +206,9 @@ void sendWebData(int fd, unsigned char type, unsigned short requestId, char *dat
 {
     FCGI_Header *header = malloc(sizeof(FCGI_Header));
     if (len > FASTCGILENGTH) {
+        printf("Anrege frere \n");
         return;
+        
     }
     header->version = FCGI_VERSION_1;
     header->type = type;
