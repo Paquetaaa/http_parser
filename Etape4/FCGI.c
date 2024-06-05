@@ -1,17 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <time.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include "fastcgi.h"
-#include <stdbool.h>
-#include "api.h"
 #include "FCGI.h"
 
 // Création de la socket
@@ -61,6 +47,7 @@ int main(void)
     // Fermeture de la socket
     close(fd);
 }
+
 // Lit les données de la socket
 size_t readSocket(int fd, char *buf, size_t len)
 {
@@ -225,7 +212,26 @@ void Create_and_Send_AbortRequest(int fd, unsigned short requestId)
     writeSocket(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
 }
 
-#define sendStdin(fd, id, stdin, len) sendWebData(fd, FCGI_STDIN, id, stdin, len)
+//#define sendStdin(fd, id, stdin, len) sendWebData(fd, FCGI_STDIN, id, stdin, len)
+
+void sendStdin(int fd, int id, char* data)
+{
+    FCGI_Header *header = malloc(sizeof(FCGI_Header));
+    int len = strlen(data);
+
+    header->version = FCGI_VERSION_1;
+    header->type = FCGI_STDIN;
+    header->requestId = htons(requestId);
+    header->contentLength = len;
+    header->paddingLength = 0;
+    header->reserved = 0;
+
+    header->contentData = data;
+
+    writeSocket(fd,header,FCGI_HEADER_SIZE + (header->contentLength));
+
+}
+
 #define sendData(fd, id, data, len) sendWebData(fd, FCGI_DATA, id, data, len)
 
 // Converti les donnéees de notre requete en données FCGI_STDIN puis les ecrits dans la sockets.
@@ -245,18 +251,13 @@ void sendWebData(int fd, unsigned char type, unsigned short requestId, char *dat
 }
 
 
-
 /*
 Pour params, la bonne moitié faut juste lire les champs "header-fields" dans l'arbre et les balancer
 pour le reste, on les genère en regardant la ou il faut
 
 La fonction pour créer les params et les écrire dans la socket : static char* createRequeteParams()
 
-
 */
-
-// J'essaie de prendre tous les headers http et les foutre quelque part
-// fd c'est le file descriptor
 char* ecrire_http_header()
 {
     void *root = getRootTree(); 
@@ -336,7 +337,6 @@ char* ecrire_fcgi_header()
     return reponse;
 }
 
-
 static FCGI_Header* createRequeteParams(int fd)
 {
     unsigned short requestId = 1;
@@ -356,7 +356,7 @@ static FCGI_Header* createRequeteParams(int fd)
 
     header->contentData = htons(params);
     
-    //write(fd,header,sizeof(header)); vu qu'on le retourne pas besoin de l'écrire
+    write(fd,header,FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength)); 
 
     return header;
 }
@@ -374,8 +374,9 @@ static FCGI_Header* createEmptyParams(int fd)
     header->paddingLength = 0;
     header->reserved = 0;
 
-    //write(fd,header,sizeof(header)); vu qu'on le retourne pas besoin de l'écrire
+    write(fd,header,FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength)); 
 
     return header;
     
 }
+
