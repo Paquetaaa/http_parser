@@ -221,13 +221,12 @@ void sendStdin(int fd, int id, char* data)
 
     header->version = FCGI_VERSION_1;
     header->type = FCGI_STDIN;
-    header->requestId = htons(requestId);
+    header->requestId = htons(id);
     header->contentLength = len;
     header->paddingLength = 0;
     header->reserved = 0;
 
-    header->contentData = data;
-
+    strcpy(header->contentData,data);
     writeSocket(fd,header,FCGI_HEADER_SIZE + (header->contentLength));
 
 }
@@ -288,7 +287,7 @@ char* ecrire_fcgi_header()
 
     char* server_name = "127.0.0.1";
     char* server_addr = "127.0.0.1";
-    char* server_port = 80;
+    char* server_port = "80";
     char* document_root = "/var/www/html";
     
 
@@ -352,9 +351,10 @@ static FCGI_Header* createRequeteParams(int fd)
     char* params = malloc((strlen(http_headers)+4+strlen(fcgi_headers))*sizeof(char));
     strcat(params,http_headers);
     strcat(params,"\r\n");
-    strcat(params,fastcgi_headers);
+    strcat(params,fcgi_headers);
 
-    header->contentData = htons(params);
+    strcpy(header->contentData,htons(params));
+
     
     write(fd,header,FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength)); 
 
@@ -386,9 +386,8 @@ void sendRequete()
     int requestID = 1;
 
     Create_and_Send_BeginRequest(socket,requestID);
-    sendStdin(socket,requestID);
     createRequeteParams(socket);
     createEmptyParams(socket);
-    sendStdin(socket,requestID);
-
+    //sendStdin(socket,requestID,"");
+    
 }
