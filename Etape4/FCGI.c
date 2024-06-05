@@ -206,9 +206,7 @@ void sendWebData(int fd, unsigned char type, unsigned short requestId, char *dat
 {
     FCGI_Header *header = malloc(sizeof(FCGI_Header));
     if (len > FASTCGILENGTH) {
-        printf("Abrege frere \n");
         return;
-        
     }
     header->version = FCGI_VERSION_1;
     header->type = type;
@@ -251,11 +249,9 @@ char *ecrire_http_header()
     return header_http;
 }
 
-char *ecrire_fcgi_header()
+nameValuePair *ecrire_fcgi_header()
 {
-    char *reponse;
-    char *retour = "\r\n";
-
+    nameValuePair reponse[4];
     char *server_name = "127.0.0.1";
     char *server_addr = "127.0.0.1";
     char *server_port = "80";
@@ -265,6 +261,25 @@ char *ecrire_fcgi_header()
     _Token *token = searchTree(root, "request_target");
     char *requestURI = getElementValue(token->node, NULL);
 
+    *token = searchTree(root, "query");
+    if(token != NULL){
+        char *queryString = getElementValue(token->node, NULL);
+        h3.tailleNom = strlen("QUERY_STRING");
+        h3.tailleDonnees = strlen(queryString);
+        h3.nom = "QUERY_STRING";
+        h3.donnees = queryString;
+    }
+    else{
+        h3.tailleNom = strlen("QUERY_STRING");
+        h3.tailleDonnees =0;
+        h3.nom = "QUERY_STRING";
+        h3.donnees = NULL;
+    }
+
+    *token = searchTree(root,"method");
+    char* methode = getElementValue(t->node, NULL);
+    methode = strtok(methode, " ");
+    
     char *current;
     strcpy(current, requestURI);
     char *next = strtok(current, '/');
@@ -279,29 +294,32 @@ char *ecrire_fcgi_header()
     char *script_filename = "proxy:fcgi://";
     char *port = "9000/";
 
+    nameValuePair h1,h2,h3,h4;
+
     strcat(script_filename, port);
     strcat(script_filename, document_root);
     strcat(script_filename, scriptname);
-    strcat(script_filename, retour);
     strcat(reponse, script_filename);
 
-    strcat(server_addr, retour);
-    strcat(reponse, server_addr);
+    h1.tailleNom = strlen("SCRIPT_FILENAME");
+    h1.tailleDonnees = strlen(reponse);
+    h1.nom = "SCRIPT_FILENAME";
+    h1.donnees = reponse;
 
-    strcat(server_port, retour);
-    strcat(reponse, server_port);
+    h2.tailleNom = strlen("REQUEST_METHOD");
+    h2.tailleDonnees = strlen(methode);
+    h2.nom = "REQUEST_METHOD";
+    h2.donnees = methode;
 
-    strcat(document_root, retour);
-    strcat(reponse, document_root);
+    h4.tailleNom = strlen("REQUEST_URI");
+    h4.tailleDonnees = strlen(requestURI);
+    h4.nom = "REQUEST_URI";
+    h4.donnees = requestURI;
 
-    strcat(requestURI, retour);
-    strcat(reponse, requestURI);
-
-    strcat(scriptname, retour);
-    strcat(reponse, scriptname);
-
-    strcat(port, retour);
-    strcat(reponse, port);
+    reponse[0] = h1;
+    reponse[1] = h2;
+    reponse[2] = h3;
+    reponse[3] = h4;
 
     return reponse;
 }
@@ -316,7 +334,7 @@ void createRequeteParams(int fd)
     header->requestId = requestId;
 
     char *http_headers = ecrire_http_header();
-    char *fcgi_headers = ecrire_fcgi_header();
+    nameValuePair *fcgi_headers = ecrire_fcgi_header(); // faut refaire ici dcp
 
     char *params = malloc((strlen(http_headers) + 4 + strlen(fcgi_headers)) * sizeof(char));
     strcat(params, http_headers);
@@ -351,16 +369,17 @@ void createEmptyParams(int fd)
 
 char* lecture_reponse(int socket)
 {
-    char* reponse;
+    char* reponse = malloc(16*FASTCGILENGTH);
     int taille;
     FCGI_Header *out = malloc(sizeof(FCGI_Header)*16);
     int i = 0;
     while(read(socket,&out[i],sizeof(out[i])) > 0)
     {
         taille = ntohs(out[i].contentLength);
-        if(out[i].type == FCGI_END_REQUEST )
+        if(out[i].type == FCGI_END_REQUEST)
         {
             printf("End request atteint c'est finito \n");
+            printf("valeur des champs = appstatus = %d, protocolstatus = %d \n");
             break;
         }
         char *content = malloc(sizeof(char)*taille);
@@ -377,6 +396,7 @@ char* lecture_reponse(int socket)
         }
         free(content);
     }
+    reponse = realloc(reponse,strlen(reponse));
     return reponse;
 }
 
@@ -392,7 +412,8 @@ void sendRequete()
     createEmptyParams(socket);
     sendStdin(socket, requestID,"", strlen(""));
 
-    //int expected = lecture_taille(socket);
+    char* reponse = lecture_reponse(socket);
+    printf("reponse = %s \n",reponse);
     
     close(socket); // Fermeture de la socket apres chaque requete
 }
