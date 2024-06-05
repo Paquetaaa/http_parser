@@ -159,7 +159,7 @@ void Create_and_Send_GetValuesRequest(int fd)
     addNameValuePair(header, FCGI_MAX_REQS, NULL);
     addNameValuePair(header, FCGI_MPXS_CONNS, NULL);
     writeSocket(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
-    free(header);
+    //free(header);
 }
 
 // Crée une requête de type FCGI_BEGIN_REQUEST. Donc on envoie le header et le body.
@@ -180,8 +180,8 @@ void Create_and_Send_BeginRequest(int fd, unsigned short requestId)
     begin->flags = 0;             // Pas besoin de garder la connexion ouverte avec le serveur.
 
     writeSocket(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
-    free(header);
-    free(begin);
+    //free(header);
+    //free(begin);
 }
 
 // Crée une requête de type FCGI_ABORT_REQUEST.
@@ -195,7 +195,7 @@ void Create_and_Send_AbortRequest(int fd, unsigned short requestId)
     header->contentLength = 0;
     header->paddingLength = 0;
     writeSocket(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
-    free(header);
+    //free(header);
 }
 
 #define sendStdin(fd, id, stdin, len) sendWebData(fd, FCGI_STDIN, id, stdin, len)
@@ -343,6 +343,7 @@ void createRequeteParams(int fd)
     header->type = FCGI_PARAMS;
     header->version = FCGI_VERSION_1;
     header->requestId = requestId;
+    header->paddingLength = 0;
 
     nameValuePair *http_headers = ecrire_http_header();
     nameValuePair *fcgi_headers = ecrire_fcgi_header(); 
@@ -351,14 +352,15 @@ void createRequeteParams(int fd)
     memcpy(en_tetes,http_headers,sizeof(http_headers));
     memcpy(en_tetes+taille_depart,fcgi_headers,sizeof(fcgi_headers));
 
-    strcpy(header->contentData, htons(en_tetes));
+    header->contentLength = htons(sizeof(en_tetes));
+    memcpy(header->contentData,htons(en_tetes),header->contentLength);
 
     write(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
     
-    free(http_headers);
-    free(fcgi_headers);
+    //free(http_headers);
+    //free(fcgi_headers);
 
-    free(header);
+    //free(header);
 }
 
 void createEmptyParams(int fd)
@@ -376,7 +378,7 @@ void createEmptyParams(int fd)
 
     write(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
 
-    free(header);
+    //free(header);
 }
 
 char* lecture_reponse(int socket)
@@ -406,7 +408,7 @@ char* lecture_reponse(int socket)
         {
             break;
         }
-        free(content);
+        //free(content);
     }
     reponse = realloc(reponse,strlen(reponse));
     return reponse;
