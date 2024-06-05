@@ -226,27 +226,35 @@ pour le reste, on les genère en regardant la ou il faut
 La fonction pour créer les params et les écrire dans la socket : static char* createRequeteParams()
 
 */
-char *ecrire_http_header()
+
+nameValuePair* ecrire_http_header()
 {
     void *root = getRootTree();
     _Token *token = searchTree(root, "header_field");
     token = token->next;
     char *header_http = NULL;
+    nameValuePair* reponse = malloc(sizeof(nameValuePair)*10);
+    int i = 0;
     // token -> node c'est le contenu, -> next c'est l'élement d'après
     while (token != NULL)
     {
+        nameValuePair *h = malloc(sizeof(nameValuePair));
         char *reponse = "HTTP_";
         char *value = getElementValue(token->node, NULL);
         char *tag = getElementTag(token->node, NULL);
-        strcat(reponse, tag);
-        reponse[strlen(reponse)] = ' ';
-        strcat(reponse, "= ");
-        strcat(reponse, value);
-        strcat(header_http, reponse);
-        strcat(header_http, "\r\n");
+        strcat(reponse,tag);
+        h->tailleNom = strlen(reponse);
+        h->tailleDonnees = strlen(value);
+        h->nom = tag;
+        h->donnees = value;
+
         token = token->next;
+        reponse[i] = h;
+        i++;
     }
-    return header_http;
+
+    reponse = realloc(reponse,i*sizeof(nameValuePair));
+    return reponse;
 }
 
 nameValuePair *ecrire_fcgi_header()
@@ -260,33 +268,33 @@ nameValuePair *ecrire_fcgi_header()
     void *root = getRootTree();
     _Token *token = searchTree(root, "request_target");
     char *requestURI = getElementValue(token->node, NULL);
-
-    *token = searchTree(root, "query");
-    if(token != NULL){
-        char *queryString = getElementValue(token->node, NULL);
+    nameValuePair h3;
+    _Token *token3 = searchTree(root, "query");
+    if(token3 != NULL){
+        char *queryString = getElementValue(token3->node, NULL);
         h3.tailleNom = strlen("QUERY_STRING");
         h3.tailleDonnees = strlen(queryString);
-        h3.nom = "QUERY_STRING";
+        memcpy(h3.nom,"QUERY_STRING",h3.tailleNom);
         h3.donnees = queryString;
     }
     else{
         h3.tailleNom = strlen("QUERY_STRING");
         h3.tailleDonnees =0;
-        h3.nom = "QUERY_STRING";
+        memcpy(h3.nom,"QUERY_STRING",h3.tailleNom);
         h3.donnees = NULL;
     }
 
-    *token = searchTree(root,"method");
-    char* methode = getElementValue(t->node, NULL);
+    _Token *token2 = searchTree(root,"method");
+    char* methode = getElementValue(token2->node, NULL);
     methode = strtok(methode, " ");
     
     char *current;
     strcpy(current, requestURI);
-    char *next = strtok(current, '/');
+    char *next = strtok(current, "/");
     while (next != NULL)
     {
         current = next;
-        next = strtok(NULL, '/');
+        next = strtok(NULL, "/");
     }
     char *scriptname;
     strcpy(scriptname, current);
@@ -294,7 +302,7 @@ nameValuePair *ecrire_fcgi_header()
     char *script_filename = "proxy:fcgi://";
     char *port = "9000/";
 
-    nameValuePair h1,h2,h3,h4;
+    nameValuePair h1,h2,h4;
 
     strcat(script_filename, port);
     strcat(script_filename, document_root);
@@ -303,17 +311,17 @@ nameValuePair *ecrire_fcgi_header()
 
     h1.tailleNom = strlen("SCRIPT_FILENAME");
     h1.tailleDonnees = strlen(reponse);
-    h1.nom = "SCRIPT_FILENAME";
+    memcpy(h1.nom,"SCRIPT_FILENAME",h1.tailleNom);
     h1.donnees = reponse;
 
     h2.tailleNom = strlen("REQUEST_METHOD");
     h2.tailleDonnees = strlen(methode);
-    h2.nom = "REQUEST_METHOD";
+    memcpy(h2.nom,"REQUEST_METHOD",h2.tailleNom);
     h2.donnees = methode;
 
     h4.tailleNom = strlen("REQUEST_URI");
     h4.tailleDonnees = strlen(requestURI);
-    h4.nom = "REQUEST_URI";
+    memcpy(h4.nom,"REQUEST_URI",h4.tailleNom);
     h4.donnees = requestURI;
 
     reponse[0] = h1;
@@ -324,6 +332,9 @@ nameValuePair *ecrire_fcgi_header()
     return reponse;
 }
 
+
+char* en_tetes;
+
 void createRequeteParams(int fd)
 {
     unsigned short requestId = 1;
@@ -333,19 +344,20 @@ void createRequeteParams(int fd)
     header->version = FCGI_VERSION_1;
     header->requestId = requestId;
 
-    char *http_headers = ecrire_http_header();
-    nameValuePair *fcgi_headers = ecrire_fcgi_header(); // faut refaire ici dcp
+    nameValuePair *http_headers = ecrire_http_header();
+    nameValuePair *fcgi_headers = ecrire_fcgi_header(); 
 
-    char *params = malloc((strlen(http_headers) + 4 + strlen(fcgi_headers)) * sizeof(char));
-    strcat(params, http_headers);
-    strcat(params, "\r\n");
-    strcat(params, fcgi_headers);
+    int taille_depart = sizeof(http_headers);
+    memcpy(en_tetes,http_headers,sizeof(http_headers));
+    memcpy(en_tetes+taille_depart,fcgi_headers,sizeof(fcgi_headers));
 
-    strcpy(header->contentData, htons(params));
+    strcpy(header->contentData, htons(en_tetes));
 
     write(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
+    
+    free(http_headers);
+    free(fcgi_headers);
 
-    free(params);
     free(header);
 }
 
