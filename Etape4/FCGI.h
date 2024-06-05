@@ -13,7 +13,14 @@
 
 #include "api.h"
 #include "fastcgi.h"
-#include "request.h
+#include "request.h"
+
+typedef struct blabla {
+    unsigned char tailleNom;
+    unsigned char tailleDonnees;
+    unsigned char* nom;
+    unsigned char* donnees;
+} nameValuePair;
 
 
 void Create_and_Send_AbortRequest(int fd, unsigned short requestId);
@@ -26,10 +33,10 @@ void readData(int fd, FCGI_Header *h, size_t *len);
 int addNameValuePair(FCGI_Header *header, char *name, char *value);
 void writeSocket(int fd, FCGI_Header *h, unsigned int len);
 void writeLen(int len, char **p);
-
+char* lecture_reponse(int socket);
 void sendRequete();
 
-char* ecrire_http_header();
-char* ecrire_fcgi_header();
-static FCGI_Header* createRequeteParams(int fd);
-static FCGI_Header* createEmptyParams(int fd);
+nameValuePair* ecrire_http_header();
+nameValuePair *ecrire_fcgi_header();
+void createRequeteParams(int fd);
+void createEmptyParams(int fd);
