@@ -30,26 +30,6 @@ static int createSocket(char *ip, int port)
     return fd;
 }
 
-int main(void)
-{
-
-    // Initialisation de la socket
-    int fd = createSocket(IP, PORT);
-
-    // Création de la requête FCGI_GET_VALUES
-    Create_and_Send_GetValuesRequest(fd);
-
-    // Création de la requête FCGI_BEGIN_REQUEST
-    Create_and_Send_BeginRequest(fd, 1);
-
-    // Création de la requête FCGI_ABORT_REQUEST
-
-    Create_and_Send_AbortRequest(fd, 1);
-
-    // Fermeture de la socket
-    close(fd);
-}
-
 // Lit les données de la socket
 size_t readSocket(int fd, char *buf, size_t len)
 {
@@ -365,16 +345,44 @@ void createEmptyParams(int fd)
     free(header);
 }
 
+
+
+
+int lecture_taille(int socket)
+{
+
+}
+
 void sendRequete()
 {
     int socket = createSocket(IP, PORT);
-    ;
+    
     int requestID = 1;
 
     Create_and_Send_BeginRequest(socket, requestID);
     createRequeteParams(socket);
     createEmptyParams(socket);
-    // sendStdin(socket,requestID,"");
+    sendStdin(socket, requestID,"", strlen(""));
 
-    // close(socket); // Fermeture de la socket apres chaque requete
+    int expected = lecture_taille(socket);
+    
+    close(socket); // Fermeture de la socket apres chaque requete
+}
+
+
+int main(void)
+{
+    message *requete;
+    
+    if ((requete = getRequest(8080)) == NULL)
+            return -1; // Il faudra penser a faire tourner le code sur le port 80 (HTTP)
+    printf("#########################################\nDemande recue depuis le client %d\n", requete->clientId);
+    printf("Client [%d] [%s:%d]\n", requete->clientId, inet_ntoa(requete->clientAddress->sin_addr), htons(requete->clientAddress->sin_port));
+    printf("Contenu de la demande %.*s\n\n", requete->len, requete->buf);
+    
+    
+    if (parseur(requete->buf, requete->len) == 1)
+    {
+        sendRequete();
+    }
 }
