@@ -347,13 +347,37 @@ void createEmptyParams(int fd)
     free(header);
 }
 
-
-
-
-int lecture_taille(int socket)
+char* lecture_reponse(int socket)
 {
-
+    char* reponse;
+    int taille;
+    FCGI_Header *out = malloc(sizeof(FCGI_Header)*16);
+    int i = 0;
+    while(read(socket,&out[i],sizeof(out[i])) > 0)
+    {
+        taille = ntohs(out[i].contentLength);
+        if(out[i].type == FCGI_END_REQUEST )
+        {
+            printf("End request atteint c'est finito \n");
+            break;
+        }
+        char *content = malloc(sizeof(char)*taille);
+        read(socket,content,taille);
+        if(out[i].type == FCGI_STDOUT)
+        {
+            printf("c'est un stdout : %s\n",content);
+        }
+        strcat(reponse,content);
+        i++;
+        if(i == 16)
+        {
+            break;
+        }
+        free(content);
+    }
+    return reponse;
 }
+
 
 void sendRequete()
 {
@@ -366,7 +390,7 @@ void sendRequete()
     createEmptyParams(socket);
     sendStdin(socket, requestID,"", strlen(""));
 
-    int expected = lecture_taille(socket);
+    //int expected = lecture_taille(socket);
     
     close(socket); // Fermeture de la socket apres chaque requete
 }
