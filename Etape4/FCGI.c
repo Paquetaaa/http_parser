@@ -380,3 +380,15 @@ static FCGI_Header* createEmptyParams(int fd)
     
 }
 
+void sendRequete()
+{
+    int socket = createSocket("127.0.0.1", 9000);;
+    int requestID = 1;
+
+    Create_and_Send_BeginRequest(socket,requestID);
+    sendStdin(socket,requestID);
+    createRequeteParams(socket);
+    createEmptyParams(socket);
+    sendStdin(socket,requestID);
+
+}

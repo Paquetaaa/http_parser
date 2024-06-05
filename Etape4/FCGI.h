@@ -27,6 +27,7 @@ int addNameValuePair(FCGI_Header *header, char *name, char *value);
 void writeSocket(int fd, FCGI_Header *h, unsigned int len);
 void writeLen(int len, char **p);
 
+void sendRequete();
 
 char* ecrire_http_header();
 char* ecrire_fcgi_header();
