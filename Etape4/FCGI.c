@@ -1,4 +1,6 @@
 #include "FCGI.h"
+#define PORT 9000
+#define IP "127.0.0.1"
 
 // Création de la socket
 static int createSocket(char *ip, int port)
@@ -32,7 +34,7 @@ int main(void)
 {
 
     // Initialisation de la socket
-    int fd = createSocket("127.0.0.1", 9000);
+    int fd = createSocket(IP, PORT);
 
     // Création de la requête FCGI_GET_VALUES
     Create_and_Send_GetValuesRequest(fd);
@@ -177,6 +179,7 @@ void Create_and_Send_GetValuesRequest(int fd)
     addNameValuePair(header, FCGI_MAX_REQS, NULL);
     addNameValuePair(header, FCGI_MPXS_CONNS, NULL);
     writeSocket(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
+    free(header);
 }
 
 // Crée une requête de type FCGI_BEGIN_REQUEST. Donc on envoie le header et le body.
@@ -197,6 +200,8 @@ void Create_and_Send_BeginRequest(int fd, unsigned short requestId)
     begin->flags = 0;             // Pas besoin de garder la connexion ouverte avec le serveur.
 
     writeSocket(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
+    free(header);
+    free(begin);
 }
 
 // Crée une requête de type FCGI_ABORT_REQUEST.
@@ -210,27 +215,10 @@ void Create_and_Send_AbortRequest(int fd, unsigned short requestId)
     header->contentLength = 0;
     header->paddingLength = 0;
     writeSocket(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
+    free(header);
 }
 
-//#define sendStdin(fd, id, stdin, len) sendWebData(fd, FCGI_STDIN, id, stdin, len)
-
-void sendStdin(int fd, int id, char* data)
-{
-    FCGI_Header *header = malloc(sizeof(FCGI_Header));
-    int len = strlen(data);
-
-    header->version = FCGI_VERSION_1;
-    header->type = FCGI_STDIN;
-    header->requestId = htons(id);
-    header->contentLength = len;
-    header->paddingLength = 0;
-    header->reserved = 0;
-
-    strcpy(header->contentData,data);
-    writeSocket(fd,header,FCGI_HEADER_SIZE + (header->contentLength));
-
-}
-
+#define sendStdin(fd, id, stdin, len) sendWebData(fd, FCGI_STDIN, id, stdin, len)
 #define sendData(fd, id, data, len) sendWebData(fd, FCGI_DATA, id, data, len)
 
 // Converti les donnéees de notre requete en données FCGI_STDIN puis les ecrits dans la sockets.
@@ -249,7 +237,6 @@ void sendWebData(int fd, unsigned char type, unsigned short requestId, char *dat
     writeSocket(fd, &h, FCGI_HEADER_SIZE + (h.contentLength) + (h.paddingLength));
 }
 
-
 /*
 Pour params, la bonne moitié faut juste lire les champs "header-fields" dans l'arbre et les balancer
 pour le reste, on les genère en regardant la ou il faut
@@ -257,115 +244,114 @@ pour le reste, on les genère en regardant la ou il faut
 La fonction pour créer les params et les écrire dans la socket : static char* createRequeteParams()
 
 */
-char* ecrire_http_header()
+char *ecrire_http_header()
 {
-    void *root = getRootTree(); 
-    _Token* token = searchTree(root, "header_field");
+    void *root = getRootTree();
+    _Token *token = searchTree(root, "header_field");
     token = token->next;
     char *header_http = NULL;
     // token -> node c'est le contenu, -> next c'est l'élement d'après
-    while(token != NULL)
+    while (token != NULL)
     {
         char *reponse = "HTTP_";
-        char* value = getElementValue(token->node,NULL);
-        char* tag = getElementTag(token->node,NULL);
-        strcat(reponse,tag);
+        char *value = getElementValue(token->node, NULL);
+        char *tag = getElementTag(token->node, NULL);
+        strcat(reponse, tag);
         reponse[strlen(reponse)] = ' ';
-        strcat(reponse,"= ");
-        strcat(reponse,value);
-        strcat(header_http,reponse);
-        strcat(header_http,"\r\n");
+        strcat(reponse, "= ");
+        strcat(reponse, value);
+        strcat(header_http, reponse);
+        strcat(header_http, "\r\n");
         token = token->next;
     }
     return header_http;
 }
 
-char* ecrire_fcgi_header()
+char *ecrire_fcgi_header()
 {
-    char* reponse;
-    char* retour = "\r\n";
+    char *reponse;
+    char *retour = "\r\n";
 
-    char* server_name = "127.0.0.1";
-    char* server_addr = "127.0.0.1";
-    char* server_port = "80";
-    char* document_root = "/var/www/html";
-    
+    char *server_name = "127.0.0.1";
+    char *server_addr = "127.0.0.1";
+    char *server_port = "80";
+    char *document_root = "/var/www/html";
 
-    void *root = getRootTree(); 
-    _Token* token = searchTree(root, "request_target");
-    char* requestURI = getElementValue(token->node,NULL);
+    void *root = getRootTree();
+    _Token *token = searchTree(root, "request_target");
+    char *requestURI = getElementValue(token->node, NULL);
 
-    char* current;
-    strcpy(current,requestURI);
-    char* next = strtok(current,'/');
-    while(next != NULL)
+    char *current;
+    strcpy(current, requestURI);
+    char *next = strtok(current, '/');
+    while (next != NULL)
     {
         current = next;
-        next = strtok(NULL,'/');
+        next = strtok(NULL, '/');
     }
-    char* scriptname;
-    strcpy(scriptname,current);
+    char *scriptname;
+    strcpy(scriptname, current);
 
-    char* script_filename = "proxy:fcgi://";
-    char* port = "9000/";
+    char *script_filename = "proxy:fcgi://";
+    char *port = "9000/";
 
-    strcat(script_filename,port);
-    strcat(script_filename,document_root);
-    strcat(script_filename,scriptname);
-    strcat(script_filename,retour);
-    strcat(reponse,script_filename);
+    strcat(script_filename, port);
+    strcat(script_filename, document_root);
+    strcat(script_filename, scriptname);
+    strcat(script_filename, retour);
+    strcat(reponse, script_filename);
 
-    strcat(server_addr,retour);
-    strcat(reponse,server_addr);
-   
-    strcat(server_port,retour);
-    strcat(reponse,server_port);
-   
-    strcat(document_root,retour);
-    strcat(reponse,document_root);
-    
-    strcat(requestURI,retour);
-    strcat(reponse,requestURI);
-   
-    strcat(scriptname,retour);
-    strcat(reponse,scriptname);
-   
-    strcat(port,retour);
-    strcat(reponse,port);
-   
+    strcat(server_addr, retour);
+    strcat(reponse, server_addr);
+
+    strcat(server_port, retour);
+    strcat(reponse, server_port);
+
+    strcat(document_root, retour);
+    strcat(reponse, document_root);
+
+    strcat(requestURI, retour);
+    strcat(reponse, requestURI);
+
+    strcat(scriptname, retour);
+    strcat(reponse, scriptname);
+
+    strcat(port, retour);
+    strcat(reponse, port);
+
     return reponse;
 }
 
-static FCGI_Header* createRequeteParams(int fd)
+void createRequeteParams(int fd)
 {
     unsigned short requestId = 1;
-    FCGI_Header* header = malloc(sizeof(FCGI_Header));
-    
+    FCGI_Header *header = malloc(sizeof(FCGI_Header));
+
     header->type = FCGI_PARAMS;
     header->version = FCGI_VERSION_1;
     header->requestId = requestId;
-    
-    char* http_headers = ecrire_http_header();
-    char* fcgi_headers = ecrire_fcgi_header();
 
-    char* params = malloc((strlen(http_headers)+4+strlen(fcgi_headers))*sizeof(char));
-    strcat(params,http_headers);
-    strcat(params,"\r\n");
-    strcat(params,fcgi_headers);
+    char *http_headers = ecrire_http_header();
+    char *fcgi_headers = ecrire_fcgi_header();
 
-    strcpy(header->contentData,htons(params));
+    char *params = malloc((strlen(http_headers) + 4 + strlen(fcgi_headers)) * sizeof(char));
+    strcat(params, http_headers);
+    strcat(params, "\r\n");
+    strcat(params, fcgi_headers);
 
-    
-    write(fd,header,FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength)); 
+    strcpy(header->contentData, htons(params));
 
-    return header;
+    write(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
+
+    free(params);
+    free(header);
 }
 
-static FCGI_Header* createEmptyParams(int fd)
+void createEmptyParams(int fd)
 {
     unsigned short requestId = 1;
-    FCGI_Header* header = malloc(sizeof(FCGI_Header));
-    
+    FCGI_Header *header = malloc(sizeof(FCGI_Header));
+
     header->type = FCGI_PARAMS;
     header->version = FCGI_VERSION_1;
     header->requestId = requestId;
@@ -374,20 +360,21 @@ static FCGI_Header* createEmptyParams(int fd)
     header->paddingLength = 0;
     header->reserved = 0;
 
-    write(fd,header,FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength)); 
+    write(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
 
-    return header;
-    
+    free(header);
 }
 
 void sendRequete()
 {
-    int socket = createSocket("127.0.0.1", 9000);;
+    int socket = createSocket(IP, PORT);
+    ;
     int requestID = 1;
 
-    Create_and_Send_BeginRequest(socket,requestID);
+    Create_and_Send_BeginRequest(socket, requestID);
     createRequeteParams(socket);
     createEmptyParams(socket);
-    //sendStdin(socket,requestID,"");
-    
+    // sendStdin(socket,requestID,"");
+
+    // close(socket); // Fermeture de la socket apres chaque requete
 }
