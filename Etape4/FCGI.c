@@ -204,17 +204,19 @@ void Create_and_Send_AbortRequest(int fd, unsigned short requestId)
 // Converti les donnéees de notre requete en données FCGI_STDIN puis les ecrits dans la sockets.
 void sendWebData(int fd, unsigned char type, unsigned short requestId, char *data, unsigned int len)
 {
-    FCGI_Header h;
-    if (len > FASTCGILENGTH)
+    FCGI_Header *header = malloc(sizeof(FCGI_Header));
+    if (len > FASTCGILENGTH) {
         return;
-
-    h.version = FCGI_VERSION_1;
-    h.type = type;
-    h.requestId = htons(requestId);
-    h.contentLength = len;
-    h.paddingLength = 0;
-    memcpy(h.contentData, data, len);
-    writeSocket(fd, &h, FCGI_HEADER_SIZE + (h.contentLength) + (h.paddingLength));
+    }
+    header->version = FCGI_VERSION_1;
+    header->type = type;
+    header->requestId = htons(requestId);
+    header->contentLength = len;
+    header->paddingLength = 0;
+    //Ecriture DATA
+    memcpy(header->contentData, data, len);
+    //Ecriture Socket
+    writeSocket(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
 }
 
 /*
