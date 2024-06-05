@@ -21,3 +21,9 @@ void readData(int fd, FCGI_Header *h, size_t *len);
 int addNameValuePair(FCGI_Header *header, char *name, char *value);
 void writeSocket(int fd, FCGI_Header *h, unsigned int len);
 void writeLen(int len, char **p);
+
+
+char* ecrire_http_header();
+char* ecrire_fcgi_header();
+static FCGI_Header* createRequeteParams(int fd);
+static FCGI_Header* createEmptyParams(int fd);
