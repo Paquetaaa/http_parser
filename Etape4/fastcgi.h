@@ -9,6 +9,7 @@
  */
 #define FCGI_VERSION_1           1
 
+/* Represents the header of a fastcgi request (web -> app) */
 typedef struct __attribute__((__packed__)) {
     unsigned char version;           // FastCGI protocol version
     unsigned char type;              // FastCGI record type : general function performing here
@@ -17,7 +18,7 @@ typedef struct __attribute__((__packed__)) {
     unsigned char paddingLength;     // Number of bytes in the paddingData component (paddingData contains 0 - 255 Bytes that are ignored)
     unsigned char reserved;          // Seems to contain everything above the transport layer ??
     char contentData[FASTCGILENGTH]; // Between 0 & 65353 bytes of data, treated as described with the type
-} FCGI_Header;  // records must be placed on boundaries of 8-bytes mutiples)
+} FCGI_Header;  // Records must be placed on boundaries of 8-bytes mutiples)
 
 #define FCGI_HEADER_SIZE           8
 
@@ -45,21 +46,22 @@ typedef struct __attribute__((__packed__)) {
 
 
 typedef struct __attribute__((__packed__)) {
-            unsigned char type;    
+            unsigned char type;         // The unknown type received
             unsigned char reserved[7];
-} FCGI_UnknownTypeBody;
+} FCGI_UnknownTypeBody; // Response to a FCGI_HEADER where the type is unknown of the app
 
 
 typedef struct __attribute__((__packed__)) {
-    unsigned short role;
-    unsigned char flags;
+    unsigned short role;        // 3 roles : FCGI_RESPONDER / FCGI_AUTHORIZE / FCGI_FILTER (cf notes page 1)
+    unsigned char flags;        // Flag about the connection control (always false | 0, close the conn after the response send)
     unsigned char unused[5];
 }  FCGI_BeginRequestBody;
 
 
- typedef struct __attribute__((__packed__)) {
-            unsigned int appStatus;
-            unsigned char protocolStatus;
+typedef struct __attribute__((__packed__)) {
+            unsigned int appStatus;         // Responder role -> what returned the exit system call | Authorizer && Filter are similar 
+            unsigned char protocolStatus;   // Can be : FCGI_REQUEST_COMPLETE | FCGI_CANT_MPX_CONN (rejecting new request <-> concurrent conn) 
+                                            // | FCGI_OVERLOADED (rejecting new request <-> short of ressoruces) | FCGI_UNKNOWN_ROLE (rejecting new ressources <-> role unknown by the app)
             unsigned char reserved[3];
 } FCGI_EndRequestBody;
 
