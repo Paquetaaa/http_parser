@@ -2,7 +2,7 @@
 #define PORT 9000
 #define IP "127.0.0.1"
 
-// Création de la socket
+// Création de la socket (routine fournie)
 static int createSocket(char *ip, int port)
 {
     int fd;
@@ -30,7 +30,7 @@ static int createSocket(char *ip, int port)
     return fd;
 }
 
-// Lit les données de la socket
+// Lit les données de la socket (from others)
 size_t readSocket(int fd, char *buf, size_t len)
 {
     size_t readlen = 0;
@@ -55,7 +55,7 @@ size_t readSocket(int fd, char *buf, size_t len)
     return readlen;
 }
 
-// Lit les données de la socket
+// Lit les données de la socket (from others)
 void readData(int fd, FCGI_Header *h, size_t *len)
 {
     size_t nb;
@@ -81,7 +81,7 @@ void readData(int fd, FCGI_Header *h, size_t *len)
     }
 }
 
-// Ajoute un nom et une valeur à la requête FCGI.
+// Ajoute un nom et une valeur à la requête FCGI (from others)
 int addNameValuePair(FCGI_Header *header, char *name, char *value)
 {
     char *p;
@@ -110,7 +110,7 @@ int addNameValuePair(FCGI_Header *header, char *name, char *value)
     return 0;
 }
 
-// Ecrit la taille de la requête
+// Ecrit la taille de la requête (from others)
 void writeLen(int len, char **p)
 {
     if (len > 0x7F)
@@ -124,7 +124,7 @@ void writeLen(int len, char **p)
         *((*p)++) = (len) & 0x7F;
 }
 
-// On ecrit dans la socket
+// On ecrit dans la socket (from others)
 void writeSocket(int fd, FCGI_Header *h, unsigned int len)
 {
     int w;
@@ -143,7 +143,7 @@ void writeSocket(int fd, FCGI_Header *h, unsigned int len)
     }
 }
 
-// Crée une requête de type FCGI_GET_VALUES
+// Crée une requête de type FCGI_GET_VALUES (from others)
 void Create_and_Send_GetValuesRequest(int fd)
 {
     FCGI_Header *header = malloc(sizeof(FCGI_Header));
@@ -162,7 +162,7 @@ void Create_and_Send_GetValuesRequest(int fd)
     //free(header);
 }
 
-// Crée une requête de type FCGI_BEGIN_REQUEST. Donc on envoie le header et le body.
+// Crée une requête de type FCGI_BEGIN_REQUEST. Donc on envoie le header et le body (from others)
 void Create_and_Send_BeginRequest(int fd, unsigned short requestId)
 {
     FCGI_Header *header = malloc(sizeof(FCGI_Header));
@@ -184,7 +184,7 @@ void Create_and_Send_BeginRequest(int fd, unsigned short requestId)
     //free(begin);
 }
 
-// Crée une requête de type FCGI_ABORT_REQUEST.
+// Crée une requête de type FCGI_ABORT_REQUEST (from others)
 void Create_and_Send_AbortRequest(int fd, unsigned short requestId)
 {
     FCGI_Header *header = malloc(sizeof(FCGI_Header));
@@ -201,7 +201,7 @@ void Create_and_Send_AbortRequest(int fd, unsigned short requestId)
 #define sendStdin(fd, id, stdin, len) sendWebData(fd, FCGI_STDIN, id, stdin, len)
 #define sendData(fd, id, data, len) sendWebData(fd, FCGI_DATA, id, data, len)
 
-// Converti les donnéees de notre requete en données FCGI_STDIN puis les ecrits dans la sockets.
+// Converti les donnéees de notre requete en données FCGI_STDIN puis les ecrits dans la sockets (from others)
 void sendWebData(int fd, unsigned char type, unsigned short requestId, char *data, unsigned int len)
 {
     FCGI_Header *header = malloc(sizeof(FCGI_Header));
@@ -219,128 +219,263 @@ void sendWebData(int fd, unsigned char type, unsigned short requestId, char *dat
     writeSocket(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
 }
 
-/*
-Pour params, la bonne moitié faut juste lire les champs "header-fields" dans l'arbre et les balancer
-pour le reste, on les genère en regardant la ou il faut
-
-La fonction pour créer les params et les écrire dans la socket : static char* createRequeteParams()
-
+/**
+ * Pour params, la bonne moitié faut juste lire les champs "header-fields" dans l'arbre et les balancer
+ * pour le reste, on les genère en regardant la ou il faut
+ *
+ * La fonction pour créer les params et les écrire dans la socket : static char* createRequeteParams()
+ *
+ * @warning La sortie est un nameValuePair** !
 */
-
-nameValuePair* ecrire_http_header()
+nameValuePair** ecrire_http_header()
 {
     void *root = getRootTree();
     _Token *token = searchTree(root, "header_field");
-    token = token->next;
-    char *header_http = NULL;
-    nameValuePair* reponse = malloc(sizeof(nameValuePair)*10);
-    int i = 0;
-    // token -> node c'est le contenu, -> next c'est l'élement d'après
+
+    token = token->next; // Permet de sauter la start-line
+
+// REMARQUE : les variables "*2" ne sont utiles que pour gerer le cas pathologique ou le premier token prend 2 header-fields a la fois
+    nameValuePair** headers_http = (nameValuePair**) malloc(sizeof(nameValuePair*)*10);  // On considere avoir au plus 10 en-tetes HTTP
+    nameValuePair* h1 = (nameValuePair*) malloc(sizeof(nameValuePair));
+    nameValuePair* h2 = (nameValuePair*) malloc(sizeof(nameValuePair));
+
+    int tailleNom1 = 0, tailleNom2 = 0;
+    int tailleData1 = 0, tailleData2 = 0;
+    
+    int i = 0;  // Compteur du nombre de header
+
+    if (token != NULL) {    // Gere le cas ou le premier token prend 2 header-fields en meme temps !
+
+    // WARNING : le token prend 2 header-fields a la fois !!
+        int taille;
+        char *header_complet = getElementValue(token->node, &taille);    // /!\ CONTIENT 2 HEADER_FIELDS EN MEME TEMPS !!
+
+        char* header1 = strtok(header_complet, "\r\n");     // Obtient le premier header_field  
+        char* header2 = strtok(NULL, "\r\n");               // Obtient le second header_field
+
+    // Rajoute les sentinelles de fin manquantes aux 2 header_fields separes
+        strcat(header1, "\0");                              
+        strcat(header2, "\0");
+
+        char* tag1 = strtok(header1, ":");   // Obtient le nom (tag) du header1
+        strcat(tag1, "\0");
+        char* value1 = strtok(NULL, ":");    // Obtient la valeur du header1
+
+        value1 += 1;                         // Supprime l'espace debutant la valeur
+
+        char* tag2 = strtok(header2, ":");   // Obtient le nom (tag) du header2
+        strcat(tag2, "\0");
+        char* value2 = strtok(NULL, ":");    // Obtient la valeur du header2
+
+        value2 += 1;                         // Supprime l'espace debutant la valeur
+
+    // Ajustement des tailles de chaque tags/valeurs
+        tailleNom1 = strlen(tag1);
+        tailleNom2 = strlen(tag2);
+        tailleData1 = strlen(value1);
+        tailleData2 = strlen(value2);
+
+
+    // Tags contenant "HTTP_" au debut, necessaire pour le serveur PHP
+        char *tag1_complet = malloc((tailleNom1 + strlen("HTTP_")) * sizeof(char));
+        char *tag2_complet = malloc((tailleNom2 + strlen("HTTP_")) * sizeof(char));
+
+        sprintf(tag1_complet, "%s", "HTTP_");
+        strcat(tag1_complet, tag1);
+
+        sprintf(tag2_complet, "%s", "HTTP_");
+        strcat(tag2_complet, tag2);
+
+    // 
+        char* valeur1_def = malloc(tailleData1 * sizeof(char));
+        char* valeur2_def = malloc(tailleData2 * sizeof(char));
+
+        strcpy(valeur1_def, value1);
+        strcpy(valeur2_def, value2);
+
+    // Placement des champs avec les var allouees sur le tas
+        h1->tailleNomB0 = tailleNom1 + strlen("HTTP_");
+        h1->tailleDonneesB0 = tailleData1;
+
+        h1->nom = tag1_complet;
+        h1->donnees = valeur1_def;
+
+        h2->tailleNomB0 = tailleNom2 + strlen("HTTP_");
+        h2->tailleDonneesB0 = tailleData2;
+
+        h2->nom = tag2_complet;
+        h2->donnees = valeur2_def;
+
+        headers_http[i] = h1;
+
+        i++;
+        headers_http[i] = h2;
+
+        i++;
+        token = token->next;
+    }
+
+    // token ->node c'est le contenu, ->next c'est l'élement d'après
     while (token != NULL)
     {
-        nameValuePair *h = malloc(sizeof(nameValuePair));
-        printf("PARAMS \n");
-        
-        char *value = getElementValue(token->node, NULL);
-        printf("%s \n",value);
-        char *tag = getElementTag(token->node, NULL);
-        char *reponse = malloc(sizeof(value) + sizeof(tag));
-        printf("%s \n",tag);
-        printf("value = %s et tag = %s \n",value,tag);
-                
-        sprintf(reponse+i*sizeof(nameValuePair),"%s","HTTP_");
+        nameValuePair* h1 = (nameValuePair*) malloc(sizeof(nameValuePair));
+        int tailleNom1 = 0;
+        int tailleData1 = 0;
 
-        printf("reponse = %s \n",reponse);
-        strcat(reponse,tag);    
-        printf("PARAMS2 \n");
-        h->tailleNom = sizeof(reponse);
-        h->tailleDonnees = sizeof(value);
-        h->nom = tag;
-        h->donnees = value;
+    // WARNING : le token prend 2 header-fields a la fois !!
+        char *header_complet = getElementValue(token->node, NULL);    // /!\ CONTIENT 2 HEADER_FIELDS EN MEME TEMPS !!
 
-        token = token->next;
-        reponse[i] = h;
+        char* header1 = strtok(header_complet, "\r\n");     // Obtient le premier header_field  
+
+    // Rajoute les sentinelles de fin manquantes aux 2 header_fields separes
+        strcat(header1, "\0");                              
+
+        char* tag1 = strtok(header1, ":");   // Obtient le nom (tag) du header1
+        strcat(tag1, "\0");
+        char* value1 = strtok(NULL, ":");    // Obtient la valeur du header1
+
+        value1 += 1;                         // Supprime l'espace debutant la valeur
+
+    // Ajustement des tailles de chaque tags/valeurs
+        tailleNom1 = strlen(tag1);
+        tailleData1 = strlen(value1);
+
+    // Tags contenant "HTTP_" au debut, necessaire pour le serveur PHP
+        char *tag1_complet = malloc((tailleNom1 + strlen("HTTP_")) * sizeof(char));
+
+        sprintf(tag1_complet, "%s", "HTTP_");
+        strcat(tag1_complet, tag1);
+
+    // 
+        char* valeur1_def = malloc(tailleData1 * sizeof(char));
+
+        strcpy(valeur1_def, value1);
+
+    // Placement des champs avec les var allouees sur le tas
+        h1->tailleNomB0 = tailleNom1 + strlen("HTTP_");
+        h1->tailleDonneesB0 = tailleData1;
+
+        h1->nom = tag1_complet;
+        h1->donnees = valeur1_def;
+
+        headers_http[i] = h1;
+
         i++;
-        printf("envoyé %d\n",i);
+        token = token->next;
     }
-    
-   // reponse = realloc(reponse,i*sizeof(nameValuePair));
-    
-    return reponse;
+        
+    return headers_http;
 }
 
-nameValuePair *ecrire_fcgi_header()
+nameValuePair** ecrire_fcgi_header()
 {
-    nameValuePair reponse[4];
+    nameValuePair* reponse[4];  // On ne rentre que 4 FCGI_headers (REQUEST_METHOD; SCRIPT_NAME; QUERY STRING; SCRIPT_FILENAME)
     char *server_name = "127.0.0.1";
     char *server_addr = "127.0.0.1";
     char *server_port = "80";
     char *document_root = "/var/www/html";
+    char *script_filename_prefixe = "proxy:fcgi://";
+    char *port = "9000/";
+
+    nameValuePair* h1 = (nameValuePair*) malloc(sizeof(nameValuePair));
+    nameValuePair* h2 = (nameValuePair*) malloc(sizeof(nameValuePair));
+    nameValuePair* h3 = (nameValuePair*) malloc(sizeof(nameValuePair));
+    nameValuePair* h4 = (nameValuePair*) malloc(sizeof(nameValuePair));
 
     void *root = getRootTree();
-    _Token *token = searchTree(root, "request_target");
-    char *requestURI = getElementValue(token->node, NULL);
-    nameValuePair h3;
-    _Token *token3 = searchTree(root, "query");
-    if(token3 != NULL){
-        char *queryString = getElementValue(token3->node, NULL);
-        h3.tailleNom = strlen("QUERY_STRING");
-        h3.tailleDonnees = strlen(queryString);
-        memcpy(h3.nom,"QUERY_STRING",h3.tailleNom);
-        h3.donnees = queryString;
+
+    _Token *token_method = searchTree(root, "method");
+    _Token *token_request_target = searchTree(root, "request_target");
+    _Token *token_query = searchTree(root, "query");
+
+    char* methode = getElementValue(token_method->node, NULL);
+    methode = strtok(methode, " ");
+    strcat(methode, "\0");
+
+    char *requestURI = getElementValue(token_request_target->node, NULL);
+    requestURI = strtok(requestURI, " ");
+    strcat(requestURI, "\0");
+
+// La query-string peut etre nulle (ommise dans un GET par exemple)
+    if(token_query != NULL){
+        char *queryString = getElementValue(token_query->node, NULL);
+
+        h3->tailleNomB0 = strlen("QUERY_STRING");
+        h3->tailleDonneesB0 = strlen(queryString);
+
+        h3->nom = malloc(h3->tailleNomB0 * sizeof(char));
+        h3->donnees = malloc(h3->tailleDonneesB0 * sizeof(char));
+
+        memcpy(h3->nom,"QUERY_STRING",h3->tailleNomB0);
+        memcpy(h3->donnees, queryString, h3->tailleDonneesB0);
     }
     else{
-        h3.tailleNom = strlen("QUERY_STRING");
-        h3.tailleDonnees = 0;
-        h3.nom = malloc(h3.tailleNom);
-        memcpy(h3.nom,"QUERY_STRING",h3.tailleNom);
-        h3.donnees = NULL;
+        h3->tailleNomB0 = strlen("QUERY_STRING");
+        h3->tailleDonneesB0 = 0;
+
+        h3->nom = malloc(h3->tailleNomB0 * sizeof(char));
+        h3->donnees = malloc(sizeof(char));
+
+        memcpy(h3->nom, "QUERY_STRING", h3->tailleNomB0);
+        memcpy(h3->donnees, "", 0);
     }
-    printf("H3 crée \n");
-    _Token *token2 = searchTree(root,"method");
-    char* methode = getElementValue(token2->node, NULL);
-    methode = strtok(methode, " ");
     
+// Cherche le SCRIPT_FILENAME en decomposant la request-target (va de /.../.../ jusqu'a ce que le prochain token soit nul)
     char *current = malloc(strlen(requestURI)+1);
-    strcpy(current,requestURI);
-    char *next = strtok(current, "/");
+
+    strcpy(current, requestURI);   // Le premier appel a strtok(requestURI, " ") a donne la methode, toute la request-target est donc obtenue au second appel
+
+    char *next = strtok(current, "/");   // Decompose la request-target selon les "/"
+
     while (next != NULL)
     {
         current = next;
         next = strtok(NULL, "/");
     }
-    char *scriptname = malloc(strlen(current)+1);
-    strcpy(scriptname, current);
 
-    char *script_filename = "proxy:fcgi://";
-    char *port = "9000/";
+// A la fin de la boucle, on obtient le SCRIPT_FILENAME "nom.extension"
+// Necessaire de remettre "/" au debut !
+    char *scriptname = malloc(strlen(current)+2);
 
-    nameValuePair h1,h2,h4;
+    sprintf(scriptname, "%s%s", "/", current);
 
-    char* tente = malloc(strlen(script_filename)+strlen(port)+strlen(document_root)+strlen(scriptname)+1);
-    strcpy(tente,script_filename);
-    strcpy(tente+strlen(script_filename),port);
-    strcpy(tente+strlen(script_filename)+strlen(port),document_root);
-    strcpy(tente+strlen(script_filename)+strlen(port)+strlen(document_root),scriptname);
-   
+// Construit le SCRIPT_FILENAME a l'aide de toutes les variables utiles
+    char* script_filename_def = (char*) malloc((strlen(script_filename_prefixe) + strlen(port) + strlen(document_root) + strlen(scriptname) +1) * sizeof(char));
 
-    h1.tailleNom = strlen("SCRIPT_FILENAME");
-    h1.tailleDonnees = strlen(script_filename);
-    h1.nom = malloc(h1.tailleNom);
-    memcpy(h1.nom,"SCRIPT_FILENAME",h1.tailleNom);
-    h1.donnees = reponse;
+    sprintf(script_filename_def, "%s", script_filename_prefixe);
+    strcat(script_filename_def, port);
+    strcat(script_filename_def, document_root);
+    strcat(script_filename_def, scriptname);
 
-    h2.tailleNom = strlen("REQUEST_METHOD");
-    h2.tailleDonnees = strlen(methode);
-    h2.nom = malloc(h2.tailleNom);
-    memcpy(h2.nom,"REQUEST_METHOD",h2.tailleNom);
-    h2.donnees = methode;
+// nameValue pair about script filename
+    h1->tailleNomB0 = strlen("SCRIPT_FILENAME");
+    h1->tailleDonneesB0 = strlen(script_filename_def);
 
-    h4.tailleNom = strlen("REQUEST_URI");
-    h4.tailleDonnees = strlen(requestURI);
-    h4.nom = malloc(h4.tailleNom);
-    memcpy(h4.nom,"REQUEST_URI",h4.tailleNom);
-    h4.donnees = requestURI;
+    h1->nom = malloc(h1->tailleNomB0 * sizeof(char));
+    h1->donnees = malloc(h1->tailleDonneesB0 * sizeof(char));
+
+    memcpy(h1->nom, "SCRIPT_FILENAME", h1->tailleNomB0);
+    memcpy(h1->donnees, script_filename_def, h1->tailleDonneesB0);
+
+// nameValue pair about request method
+    h2->tailleNomB0 = strlen("REQUEST_METHOD");
+    h2->tailleDonneesB0 = strlen(methode);
+
+    h2->nom = malloc(h2->tailleNomB0 * sizeof(char));
+    h2->donnees = malloc(h2->tailleDonneesB0 * sizeof(char));
+
+    memcpy(h2->nom, "REQUEST_METHOD", h2->tailleNomB0);
+    memcpy(h2->donnees, methode, h2->tailleDonneesB0);
+
+// nameValue pair about requestURI
+    h4->tailleNomB0 = strlen("REQUEST_URI");
+    h4->tailleDonneesB0 = strlen(requestURI);
+
+    h4->nom = malloc(h4->tailleNomB0 * sizeof(char));
+    h4->donnees = malloc(h4->tailleDonneesB0 * sizeof(char));
+
+    memcpy(h4->nom, "REQUEST_URI", h4->tailleNomB0);
+    memcpy(h4->donnees, requestURI, h4->tailleDonneesB0);
 
     reponse[0] = h1;
     reponse[1] = h2;

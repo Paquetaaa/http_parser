@@ -16,13 +16,16 @@
 #include "request.h"
 
 typedef struct blabla {
-    unsigned char tailleNom;
-    unsigned char tailleDonnees;
+    unsigned char tailleNomB0;
+    unsigned char tailleDonneesB0;
     unsigned char* nom;
     unsigned char* donnees;
 } nameValuePair;
 
+// Given
+static int createSocket(char *ip, int port);
 
+// From others
 void Create_and_Send_AbortRequest(int fd, unsigned short requestId);
 void Create_and_Send_BeginRequest(int fd, unsigned short requestId);
 void Create_and_Send_GetValuesRequest(int fd);
@@ -36,7 +39,8 @@ void writeLen(int len, char **p);
 char* lecture_reponse(int socket);
 void sendRequete();
 
-nameValuePair* ecrire_http_header();
-nameValuePair *ecrire_fcgi_header();
+// Ours
+nameValuePair** ecrire_http_header();
+nameValuePair** ecrire_fcgi_header();
 void createRequeteParams(int fd);
 void createEmptyParams(int fd);
