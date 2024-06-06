@@ -33,8 +33,13 @@
             }
 
             if(!isset($error)){
-                //Upload le fichier dans le dossier uploads
-                move_uploaded_file($_FILES['fichier']['tmp_name'], 'uploads/' . $_FILES['fichier']['name']);
+                //Upload le fichier dans le dossier upload
+                if (!is_dir('upload')) {
+                    echo 'Le dossier "upload" n\'existe pas.';
+                } else if (!is_writable('upload')) {
+                    echo 'Le serveur n\'a pas les permissions pour écrire dans le dossier "upload".';
+                }
+                move_uploaded_file($_FILES['fichier']['tmp_name'], 'upload/' . $_FILES['fichier']['name']);
                 echo 'Fichier envoyé avec succès';
             }else{
                 echo $error;
