@@ -288,8 +288,8 @@ nameValuePair* ecrire_http_header(int* nb_http_headers)
 
 
     // Tags contenant "HTTP_" au debut, necessaire pour le serveur PHP
-        char *tag1_complet = malloc((tailleNom1 + strlen("HTTP_") +1) * sizeof(char));
-        char *tag2_complet = malloc((tailleNom2 + strlen("HTTP_") +1) * sizeof(char));
+        char *tag1_complet = malloc((tailleNom1 + strlen("HTTP_")) * sizeof(char));
+        char *tag2_complet = malloc((tailleNom2 + strlen("HTTP_")) * sizeof(char));
 
         sprintf(tag1_complet, "%s", "HTTP_");
         strcat(tag1_complet, tag1);
