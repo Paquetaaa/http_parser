@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stdbool.h>
@@ -40,7 +41,7 @@ char* lecture_reponse(int socket);
 void sendRequete();
 
 // Ours
-nameValuePair** ecrire_http_header();
-nameValuePair** ecrire_fcgi_header();
+nameValuePair* ecrire_http_header(int* nb_http_headers);
+nameValuePair* ecrire_fcgi_header(int* nb_fcgi_headers);
 void createRequeteParams(int fd);
 void createEmptyParams(int fd);
