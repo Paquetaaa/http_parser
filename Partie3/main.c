@@ -20,6 +20,7 @@
 
 #define REPONSEGOOD "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: Keepalive\r\n\r\n"
 #define REPONSEBAD "HTTP/1.0 400 Bad Request\r\n\r\n"
+#define MAX_PATH_SIZE 300
 
 typedef enum methode
 {
@@ -90,14 +91,16 @@ int main(int argc, char *argv[])
 
         // Declaration de quelques variables globales au traitement de chaque header
         bool flag_err = false;
-        bool flag_v1_1 = true;                 // On part du principe qu'on encode le serveur sur une version HTTP/1.1...
-        bool flag_connection_keepalive = true; // ... d'ou le keepalive par defaut
-        char *path_request_target;             // Chemin absolu vers la ressource demandee
-        struct stat file_stat;                 // Structure contenant les stats du fichier requete (champs "st_mode" & "st_size" interessants)
-        int f_size;                            // Taille de la ressource envoyee en octet (= file_stat.st_size)
-        char *f_type;                          // String contenant le(s) type(s) du/des fichier(s) renvoye(s) en reponse
-        char *host_filter;                     // String contenant le host sans prefixe (e.g. www.) et sans suffixe (e.g. .fr)
+        bool flag_v1_1 = true;                                                                // On part du principe qu'on encode le serveur sur une version HTTP/1.1...
+        bool flag_connection_keepalive = true;                                                // ... d'ou le keepalive par defaut
+        char *path_request_target = (char*) malloc(MAX_PATH_SIZE * sizeof(char));             // Chemin absolu vers la ressource demandee
+        struct stat file_stat;                                                                // Structure contenant les stats du fichier requete (champs "st_mode" & "st_size" interessants)
+        int f_size;                                                                           // Taille de la ressource envoyee en octet (= file_stat.st_size)
+        char *f_type;                                                                         // String contenant le(s) type(s) du/des fichier(s) renvoye(s) en reponse
+        char *host_filter;                                                                    // String contenant le host sans prefixe (e.g. www.) et sans suffixe (e.g. .fr)
         FILE* f_descripteur;
+        magic_t file_magic = magic_open(MAGIC_MIME);                                          // Ouvre le cookie qui servira a determiner le type du fichier requete
+        magic_load(file_magic, NULL);                                                         // Charge le cookie, maintenant pret a etre utilise !
 
         // Verifie que le parser s'est execute correctement (et recupere la strcuture qu'il en sort par la meme occasion)
         if (parseur(requete->buf, requete->len) == 1)
@@ -239,7 +242,7 @@ int main(int argc, char *argv[])
                     }
 
                     // Premiere concatenation pour former le chemin vers la target (maintenant que la request target est clean)
-                    strcat(path_request_target, prefixe_target);
+                    strcpy(path_request_target, prefixe_target);
 
                     // On traite d'abord Host avant la fin du traitement de la request-target pour s'assurer que les dernieres erreurs dans la requete seront reperees
                     // (et car du Host besoin pour finaliser le chemin absolu)
@@ -299,11 +302,13 @@ int main(int argc, char *argv[])
                         strcat(path_request_target, host_filter);
                         strcat(path_request_target, "/");
                     }
-                    strcat(path_request_target, request_target);
 
                     // /!\ ATTENTION : LA VARIABLE $LD_LIBRARY_PATH S'EST RAJOUTEE AU DEBUT DE path_request_target !!!
+                    strcat(path_request_target, request_target);
+
 
                     // Traitement de la request-target...
+                    //... d'abord on s'assure qu'on ne demande pas la racine (on n'accepte pas les repertoires, uniquements les fichiers reguliers)
                     if (strcmp(path_request_target, "/") == 0) {
                         if (!flag_connection_keepalive)
                         {
@@ -317,7 +322,7 @@ int main(int argc, char *argv[])
                         continue;
                     }
 
-                    // ... d'abord on check si le fichier existe (avec stat(), on obtient des informations complementaires et si le retour est -1, le fichier n'existe pas)
+                    // ... ensuite on check si le fichier existe (avec stat(), on obtient des informations complementaires et si le retour est -1, le fichier n'existe pas)
                     // ATTENTION : soit le fichier n'existe pas du tout, soit l'extension n'a juste pas ete precisee !
                     if ((stat(path_request_target, &file_stat)) == -1)
                     {
@@ -333,7 +338,7 @@ int main(int argc, char *argv[])
                         continue;
                     }
 
-                    // ... s'assure que le fichier designe / ouvrable est bien un fichier regulier (on pourrait etendre renvoyer la liste des fichiers dispo dans un repertoire...)
+                    // ... on s'assure que le fichier designe / ouvrable est bien un fichier regulier (on pourrait etendre renvoyer la liste des fichiers dispo dans un repertoire...)
                     // (donc il faudra regarder le type...)
                     if (!S_ISREG(file_stat.st_mode))
                     {
@@ -350,11 +355,9 @@ int main(int argc, char *argv[])
                     }
 
                     // Determine le type du fichier ouvert via la libmagic
-                    magic_t file_magic = magic_open(MAGIC_MIME);
-                    magic_load(file_magic, NULL);
                     f_type = magic_file(file_magic, path_request_target);
 
-                    magic_close(file_magic);
+                    
                 }
                 // La request-target est obligatoirement presente dans la start-line, elle fait au minimum "/"
                 else
@@ -532,11 +535,11 @@ int main(int argc, char *argv[])
 
                 // Check des caracteristiques en lecture du fichier voulu
                 f_size = file_stat.st_size;
-                char *lecture = (char *)malloc(f_size);
+                char *lecture = (char *) malloc(f_size * sizeof(char));
                 f_descripteur = fopen(path_request_target, "r");
                 ssize_t nb_lu = read(f_descripteur, lecture, f_size);
 
-                if (nb_lu < f_size / sizeof(char))
+                if (nb_lu < f_size)
                 { // f_size exprime la quantite en octets, nb_lu exprime la quantite en nombre d'objets lu
                     lecture = realloc(lecture, nb_lu * sizeof(char));
                     f_size = nb_lu * sizeof(char);
@@ -544,35 +547,50 @@ int main(int argc, char *argv[])
 
                 fclose(f_descripteur);
 
-                char *Date = "Date: ";
                 char *date;
-                effectueDatation(&date);
-                strcat(Date, date);
-                strcat(Date, "\r\n");
-                writeDirectClient(requete->clientId, Date, strlen(date));
+                effectueDatation(&date);                
 
-                char* Content_Length = "Content-Length: ";
-                char *content_length = (char*) f_size;
-                strcat(Content_Length, content_length); // Ligne source d'erreur
-                strcat(Content_Length, "\r\n");
-                writeDirectClient(requete->clientId, Content_Length, strlen(Content_Length));
+                char *date_header = (char*) malloc((strlen("Date: ") + strlen(date) +2) * sizeof(char));
+                strcpy(date_header, "Date: ");
+                strcat(date_header, date);
+                strcat(date_header, "\r\n");
 
-                char *content_type = "Content-Type: ";
-                strcat(content_type, f_type);
-                strcat(content_type, "\r\n");
-                writeDirectClient(requete->clientId, content_type, strlen(content_type));
+                writeDirectClient(requete->clientId, date_header, strlen(date_header));
+                free(date_header);
+
+
+                char *content_length = (char*) malloc(100 * sizeof(char));
+                sprintf(content_length, "%d", f_size);
+
+                char* content_length_header = (char*) malloc((strlen("Content-Length: ") + strlen(content_length) +2) * sizeof(char));
+                strcpy(content_length_header, "Content-Length: ");
+                strcat(content_length_header, content_length); 
+                strcat(content_length_header, "\r\n");
+
+                writeDirectClient(requete->clientId, content_length_header, strlen(content_length_header));
+                free(content_length);
+                free(content_length_header);
+
+
+                char *content_type_header = (char*) malloc((strlen("Content-Type: ") + strlen(f_type) +2) * sizeof(char));
+                strcpy(content_type_header, "Content-Type: ");
+                strcat(content_type_header, f_type);
+                strcat(content_type_header, "\r\n");
+
+                writeDirectClient(requete->clientId, content_type_header, strlen(content_type_header));
+                free(content_type_header);
+
 
                 char *connection = (flag_connection_keepalive ? "Connection: keep-alive\r\n" : "Connection: close\r\n");
                 writeDirectClient(requete->clientId, connection, strlen(connection));
 
-                writeDirectClient(requete->clientId, "\r\n", strlen("\r\n"));
 
+                writeDirectClient(requete->clientId, "\r\n", strlen("\r\n"));
 
                 if (methode == GET) {
                 // Ecriture / Envoie du body-message
                     writeDirectClient(requete->clientId, lecture, nb_lu);
                 }
-
                 break;
             }
         }
@@ -594,8 +612,10 @@ int main(int argc, char *argv[])
             requestShutdownSocket(requete->clientId);
         }
 
-        // on ne se sert plus de requete a partir de maintenant, on peut donc liberer...
+        // on ne se sert plus de la requete courante a partir de maintenant, on peut donc liberer toutes les donnees correspondantes...
         freeRequest(requete);
+        free(path_request_target);
+        magic_close(file_magic);
     }
 
     return (1);
@@ -733,7 +753,7 @@ char *effectuePercentCoding(char *msg, int *taille_msg, bool *flag_err)
         return msg;
     }
 
-    msg_final = realloc(msg_final, taille_finale * sizeof(char));
+    msg_final = realloc(msg_final, (taille_finale +1) * sizeof(char));
     msg_final[taille_finale] = '\0';
     *taille_msg = taille_finale;
 
