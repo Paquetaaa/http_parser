@@ -244,17 +244,17 @@ nameValuePair* ecrire_http_header()
         char *value = getElementValue(token->node, NULL);
         printf("%s \n",value);
         char *tag = getElementTag(token->node, NULL);
-        char *reponse = malloc(strlen(value) + strlen(tag));
+        char *reponse = malloc(sizeof(value) + sizeof(tag));
         printf("%s \n",tag);
         printf("value = %s et tag = %s \n",value,tag);
                 
-        strcat(reponse,"HTTP_");
+        sprintf(reponse+i*sizeof(nameValuePair),"%s","HTTP_");
 
         printf("reponse = %s \n",reponse);
         strcat(reponse,tag);    
         printf("PARAMS2 \n");
-        h->tailleNom = strlen(reponse);
-        h->tailleDonnees = strlen(value);
+        h->tailleNom = sizeof(reponse);
+        h->tailleDonnees = sizeof(value);
         h->nom = tag;
         h->donnees = value;
 
@@ -264,7 +264,7 @@ nameValuePair* ecrire_http_header()
         printf("envoyé %d\n",i);
     }
     
-    reponse = realloc(reponse,i*sizeof(nameValuePair));
+   // reponse = realloc(reponse,i*sizeof(nameValuePair));
     
     return reponse;
 }
@@ -357,12 +357,11 @@ void createRequeteParams(int fd)
 {   
     unsigned short requestId = 1;
     FCGI_Header *header = malloc(sizeof(FCGI_Header));
-
-
     header->type = FCGI_PARAMS;
     header->version = FCGI_VERSION_1;
-    header->requestId = requestId;
+    header->requestId = htons(requestId);
     header->paddingLength = 0;
+    header->reserved = 0;
 
     
     nameValuePair *http_headers = ecrire_http_header();
@@ -371,18 +370,23 @@ void createRequeteParams(int fd)
     int taille_depart = sizeof(http_headers);
     int taille_arrivee = sizeof(fcgi_headers);
 
-    char* en_tetes = malloc(taille_depart+taille_arrivee);
+    unsigned char buffer_entete[FASTCGILENGTH];
     
-    memcpy(en_tetes,http_headers,taille_depart);
-    sprintf(en_tetes+taille_depart,"%s",fcgi_headers);
+    memcpy(buffer_entete,http_headers,taille_depart);
+    sprintf(buffer_entete+taille_depart,"%s",fcgi_headers);
   //  memcpy(en_tetes+taille_depart,fcgi_headers,taille_arrivee);
 
-    header->contentLength = htons(sizeof(en_tetes));
+    header->contentLength = sizeof(buffer_entete);
     //memcpy(header->contentData,htons(en_tetes),header->contentLength);
-    sprintf(header->contentData,"%d",htons(en_tetes));
+  //  sprintf(header->contentData,"%d",htons(en_tetes));
 
     //write(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
-    memcpy(fd,header,FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength)-1);
+    
+    //memcpy(fd,&header,sizeof(header)+1);
+    //memcpy(fd,buffer_entete,sizeof(buffer_entete));
+    write(fd, header, sizeof(header));
+    write(fd, buffer_entete,FASTCGILENGTH);
+
     //free(http_headers);
     //free(fcgi_headers);
 
