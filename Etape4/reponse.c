@@ -62,3 +62,25 @@ void Requete(char* buffer_reponse,int clientId, struct sockaddr_in *clientAddres
     
     close(socket); 
 }
+
+int test(void)
+{
+    message *requete;
+    
+    if ((requete = getRequest(8080)) == NULL)
+            return -1; // Il faudra penser a faire tourner le code sur le port 80 (HTTP)
+    printf("#########################################\nDemande recue depuis le client %d\n", requete->clientId);
+    printf("Client [%d] [%s:%d]\n", requete->clientId, inet_ntoa(requete->clientAddress->sin_addr), htons(requete->clientAddress->sin_port));
+    printf("Contenu de la demande %.*s\n\n", requete->len, requete->buf);
+    
+    
+    if (parseur(requete->buf, requete->len) == 1)
+    {
+        Requete(requete->buf,requete->clientId,requete->clientAddress);
+    }
+    freeRequest(requete);
+}
+ if(strstr(f_type,"php") != NULL)
+                    {
+                        Requete(requete->buf,requete->clientId,requete->clientAddress); // Ca répond tout
+                    }
