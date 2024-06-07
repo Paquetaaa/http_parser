@@ -216,6 +216,8 @@ int main(int argc, char *argv[])
                     // (transforme les %.. en caractere formel pour ensuite pouvoir effectuer les operations dessus sans soucis)
                     request_target = effectuePercentCoding(request_target, &len_request_target, &flag_err);
 
+                    printf("request_target : %s\n", request_target);
+
                     if (flag_err) {
                         if (!flag_connection_keepalive)
                         {
@@ -703,7 +705,7 @@ void traiteHTTPVersion(_Token *t, message *requete, bool *flag_v, bool *flag_err
 
 /**
  * Routine se chargeant de traiter le Percent Coding de la request-target pour n'avoir in fine que des caracteres ASCII
- * @warning Re-ecrit la request-target et modifie sa taille sur place !
+ * @warning Modifie la taille de la request-target en place !
  */
 char *effectuePercentCoding(char *msg, int *taille_msg, bool *flag_err)
 {
@@ -715,7 +717,7 @@ char *effectuePercentCoding(char *msg, int *taille_msg, bool *flag_err)
     }
     int taille_finale = *taille_msg;
 
-    // Parse l'integralite de la request-target a la recherche de caraceteres encodes avec des pourcents
+// Parse l'integralite de la request-target a la recherche de caraceteres encodes avec des pourcents
     for (int index = 0; index < taille_finale; index++)
     {
 
@@ -727,8 +729,8 @@ char *effectuePercentCoding(char *msg, int *taille_msg, bool *flag_err)
 
             if (index + 2 < taille_finale)
             { // S'assure que les 2 prochains caracteres sont disponibles (ils doivent etre compris entre 0 et 9 ou A et F)
-                nbr_hex[2] = msg_final[index + 2];
-                nbr_hex[3] = msg_final[index + 3];
+                nbr_hex[2] = msg_final[index + 1];
+                nbr_hex[3] = msg_final[index + 2];
 
                 if ((nbr_hex[2] < 'A' || nbr_hex[2] > 'F') && (nbr_hex[2] < '0' || nbr_hex[2] > '9'))
                 {
@@ -744,9 +746,10 @@ char *effectuePercentCoding(char *msg, int *taille_msg, bool *flag_err)
 
                 int nbr_int = (int)strtol(nbr_hex, NULL, 16);
 
-                msg_final[index] = (char)nbr_int;
+                msg_final[index] = (char)nbr_int;   // Remplace le '%' par le caractere represente en hexa
 
-                for (int j = 0; j < taille_finale; j++)
+            // Recule tous les elements qui suivent le code hexa de 2 places (car les 2 chiffres formant l'hexa disparaissent)
+                for (int j = index +3; j < taille_finale; j++)
                 {
                     msg_final[j - 2] = msg_final[j];
                 }
@@ -759,14 +762,14 @@ char *effectuePercentCoding(char *msg, int *taille_msg, bool *flag_err)
             }
         }
     }
-    // S'il y a une erreur de levee, autant ne pas s'embeter plus et renvoyer le message erronne, enverra une 400 Bad Request ulterieurement
+// S'il y a une erreur de levee, autant ne pas s'embeter plus et renvoyer le message erronne, enverra une 400 Bad Request ulterieurement
     if (*flag_err)
     {
         return msg;
     }
-
-    msg_final = realloc(msg_final, (taille_finale +1) * sizeof(char));
-    msg_final[taille_finale] = '\0';
+// Reforme le message final pour qu'il ne soit pas trop grand au vu des possibles diminutions faites dans le messages
+    msg_final = (char*) realloc(msg_final, (taille_finale +1) * sizeof(char));
+    msg_final[taille_finale] = '\0';    
     *taille_msg = taille_finale;
 
     return msg_final;
