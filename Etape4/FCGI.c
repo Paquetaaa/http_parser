@@ -30,57 +30,6 @@ static int createSocket(char *ip, int port)
     return fd;
 }
 
-// Lit les données de la socket (from others)
-size_t readSocket(int fd, char *buf, size_t len)
-{
-    size_t readlen = 0;
-    ssize_t nb = 0;
-
-    if (len == 0)
-        return 0;
-
-    do
-    {
-        // try to read
-        do
-        {
-            nb = read(fd, buf + readlen, len - readlen);
-        } while (nb == -1 && errno == EINTR);
-        if (nb > 0)
-            readlen += nb;
-    } while ((nb > 0) && (len != readlen));
-
-    if (nb < 0)
-        readlen = -1;
-    return readlen;
-}
-
-// Lit les données de la socket (from others)
-void readData(int fd, FCGI_Header *h, size_t *len)
-{
-    size_t nb;
-    *len = 0;
-
-    nb = sizeof(FCGI_Header) - FASTCGILENGTH;
-    if ((readSocket(fd, (char *)h, nb) == nb))
-    {
-        h->requestId = htons(h->requestId);
-
-        h->contentLength = htons(h->contentLength);
-        *len += nb;
-        nb = h->contentLength + h->paddingLength;
-
-        if ((readSocket(fd, (char *)h->contentData, nb) == nb))
-        {
-            *len += nb;
-        }
-        else
-        {
-            *len = 0;
-        }
-    }
-}
-
 // Ajoute un nom et une valeur à la requête FCGI (from others)
 int addNameValuePair(FCGI_Header *header, char *name, char *value)
 {
@@ -124,25 +73,6 @@ void writeLen(int len, char **p)
         *((*p)++) = (len) & 0x7F;
 }
 
-// On ecrit dans la socket (from others)
-void writeSocket(int fd, FCGI_Header *h, unsigned int len)
-{
-    int w;
-
-    // On convertit les données en network byte order avec htons
-    h->contentLength = htons(h->contentLength);
-    h->paddingLength = htons(h->paddingLength);
-
-    while (len > 0)
-    {
-        do
-        {
-            w = write(fd, h, len);
-        } while (w == -1 && errno == EINTR);
-        len -= w;
-    }
-}
-
 // Crée une requête de type FCGI_GET_VALUES 
 void Create_and_Send_GetValuesRequest(int fd)
 {
@@ -158,7 +88,7 @@ void Create_and_Send_GetValuesRequest(int fd)
     addNameValuePair(header, FCGI_MAX_CONNS, NULL);
     addNameValuePair(header, FCGI_MAX_REQS, NULL);
     addNameValuePair(header, FCGI_MPXS_CONNS, NULL);
-    writeSocket(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
+    write(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
 }
 
 // Crée une requête de type FCGI_BEGIN_REQUEST. Donc on envoie le header et le body 
@@ -208,7 +138,7 @@ void Create_and_Send_AbortRequest(int fd, unsigned short requestId)
 #define sendStdin(fd, id, stdin, len) sendWebData(fd, FCGI_STDIN, id, stdin, len)
 #define sendData(fd, id, data, len) sendWebData(fd, FCGI_DATA, id, data, len)
 
-// Converti les donnéees de notre requete en données FCGI_STDIN puis les ecrits dans la sockets (from others)
+// Converti les donnéees de notre requete en données FCGI_STDIN puis les ecrits dans la sockets
 void sendWebData(int fd, unsigned char type, unsigned short requestId, char *data, unsigned int len)
 {
     FCGI_Header *header = malloc(sizeof(FCGI_Header));
