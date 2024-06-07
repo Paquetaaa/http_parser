@@ -30,6 +30,57 @@ static int createSocket(char *ip, int port)
     return fd;
 }
 
+// Lit les données de la socket (from others)
+size_t readSocket(int fd, char *buf, size_t len)
+{
+    size_t readlen = 0;
+    ssize_t nb = 0;
+
+    if (len == 0)
+        return 0;
+
+    do
+    {
+        // try to read
+        do
+        {
+            nb = read(fd, buf + readlen, len - readlen);
+        } while (nb == -1 && errno == EINTR);
+        if (nb > 0)
+            readlen += nb;
+    } while ((nb > 0) && (len != readlen));
+
+    if (nb < 0)
+        readlen = -1;
+    return readlen;
+}
+
+// Lit les données de la socket (from others)
+void readData(int fd, FCGI_Header *h, size_t *len)
+{
+    size_t nb;
+    *len = 0;
+
+    nb = sizeof(FCGI_Header) - FASTCGILENGTH;
+    if ((readSocket(fd, (char *)h, nb) == nb))
+    {
+        h->requestId = htons(h->requestId);
+
+        h->contentLength = htons(h->contentLength);
+        *len += nb;
+        nb = h->contentLength + h->paddingLength;
+
+        if ((readSocket(fd, (char *)h->contentData, nb) == nb))
+        {
+            *len += nb;
+        }
+        else
+        {
+            *len = 0;
+        }
+    }
+}
+
 // Ajoute un nom et une valeur à la requête FCGI (from others)
 int addNameValuePair(FCGI_Header *header, char *name, char *value)
 {
@@ -47,8 +98,8 @@ int addNameValuePair(FCGI_Header *header, char *name, char *value)
         return -1;
 
     p = (header->contentData) + header->contentLength;
-    writeLen(nameLen, &p);
-    writeLen(valueLen, &p);
+    //intToBytes(nameLen, &p);
+    //intToBytes(valueLen, &p);
     strncpy(p, name, nameLen);
     p += nameLen;
     if (value)
@@ -59,18 +110,23 @@ int addNameValuePair(FCGI_Header *header, char *name, char *value)
     return 0;
 }
 
-// Ecrit la taille de la requête (from others)
-void writeLen(int len, char **p)
+// On ecrit dans la socket (from others)
+void writeSocket(int fd, FCGI_Header *h, unsigned int len)
 {
-    if (len > 0x7F)
+    int w;
+
+    // On convertit les données en network byte order avec htons
+    h->contentLength = htons(h->contentLength);
+    h->paddingLength = htons(h->paddingLength);
+
+    while (len > 0)
     {
-        *((*p)++) = (len >> 24) & 0x7F;
-        *((*p)++) = (len >> 16) & 0xFF;
-        *((*p)++) = (len >> 8) & 0xFF;
-        *((*p)++) = (len) & 0xFF;
+        do
+        {
+            w = write(fd, h, len);
+        } while (w == -1 && errno == EINTR);
+        len -= w;
     }
-    else
-        *((*p)++) = (len) & 0x7F;
 }
 
 // Crée une requête de type FCGI_GET_VALUES 
@@ -88,7 +144,27 @@ void Create_and_Send_GetValuesRequest(int fd)
     addNameValuePair(header, FCGI_MAX_CONNS, NULL);
     addNameValuePair(header, FCGI_MAX_REQS, NULL);
     addNameValuePair(header, FCGI_MPXS_CONNS, NULL);
-    write(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
+    writeSocket(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
+}
+
+/**
+ * Transforme la taille d'un integer en octets
+*/
+bool intToBytes(int taille, char *o)
+{
+// Check si la taille est superieure a ce qu'on peut contenir sur 7 bits, encode alors sur 4 octets
+    if (taille > 0x7F) {
+        *((o)++) = (taille >> 24) & 0x7F;
+        *((o)++) = (taille >> 16) & 0xFF;
+        *((o)++) = (taille >> 8) & 0xFF;
+        *((o)++) = (taille) & 0xFF;
+        return true;
+    }
+// Sinon c'est que cela passe sur 7 bits :)
+    else {
+        *((o)++) = (taille) & 0x7F;
+        return false;
+    }
 }
 
 // Crée une requête de type FCGI_BEGIN_REQUEST. Donc on envoie le header et le body 
@@ -111,7 +187,8 @@ void Create_and_Send_BeginRequest(int fd, unsigned short requestId)
     header->contentLength = htons(header->contentLength);
     header->paddingLength = htons(header->paddingLength);
 
-    write(fd, header, FCGI_HEADER_SIZE + header->contentLength + header->paddingLength);
+    write(fd, header, FCGI_HEADER_SIZE + ntohs(header->contentLength) + ntohs(header->paddingLength));
+    
 
     //free(begin);
     //free(header);
@@ -131,14 +208,14 @@ void Create_and_Send_AbortRequest(int fd, unsigned short requestId)
     header->contentLength = htons(header->contentLength);
     header->paddingLength = htons(header->paddingLength);
     
-    write(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
-    free(header);
+    write(fd, header, FCGI_HEADER_SIZE + ntohs(header->contentLength) + ntohs(header->paddingLength));
+    //free(header);
 }
 
 #define sendStdin(fd, id, stdin, len) sendWebData(fd, FCGI_STDIN, id, stdin, len)
 #define sendData(fd, id, data, len) sendWebData(fd, FCGI_DATA, id, data, len)
 
-// Converti les donnéees de notre requete en données FCGI_STDIN puis les ecrits dans la sockets
+// Converti les donnéees de notre requete en données FCGI_STDIN puis les ecrits dans la sockets (from others)
 void sendWebData(int fd, unsigned char type, unsigned short requestId, char *data, unsigned int len)
 {
     FCGI_Header *header = malloc(sizeof(FCGI_Header));
@@ -238,14 +315,34 @@ nameValuePair* ecrire_http_header(int* nb_http_headers)
         h1.tailleNomB0 = tailleNom1 + strlen("HTTP_");
         h1.tailleDonneesB0 = tailleData1 +1;
 
-        h1.nom = tag1_complet;
-        h1.donnees = valeur1_def;
+        h1.nom = (unsigned char*) malloc(h1.tailleNomB0 * sizeof(unsigned char));
+        h1.donnees = (unsigned char*) malloc(h1.tailleDonneesB0 * sizeof(unsigned char));
+
+        memcpy(h1.nom, tag1_complet, h1.tailleNomB0);
+        memcpy(h1.donnees, valeur1_def, h1.tailleDonneesB0);
+
+        h1.tailleNomB0 = htons(h1.tailleNomB0);
+        h1.tailleDonneesB0 = htons(h1.tailleDonneesB0);
+
+        //free(tag1_complet);
+        //free(valeur1_def);
+
+
 
         h2.tailleNomB0 = tailleNom2 + strlen("HTTP_");
         h2.tailleDonneesB0 = tailleData2 +1;
 
-        h2.nom = tag2_complet;
-        h2.donnees = valeur2_def;
+        h2.nom = (unsigned char*) malloc(h2.tailleNomB0 * sizeof(unsigned char));
+        h2.donnees = (unsigned char*) malloc(h2.tailleDonneesB0 * sizeof(unsigned char));
+
+        memcpy(h2.nom, tag2_complet, h2.tailleNomB0);
+        memcpy(h2.donnees, valeur2_def, h2.tailleDonneesB0);
+
+        h2.tailleNomB0 = htons(h2.tailleNomB0);
+        h2.tailleDonneesB0 = htons(h2.tailleDonneesB0);
+
+        //free(tag2_complet);
+        //free(valeur2_def);
 
         headers_http[i] = h1;
 
@@ -296,8 +393,17 @@ nameValuePair* ecrire_http_header(int* nb_http_headers)
         h1.tailleNomB0 = tailleNom1 + strlen("HTTP_");
         h1.tailleDonneesB0 = tailleData1 +1;
 
-        h1.nom = tag1_complet;
-        h1.donnees = valeur1_def;
+        h1.nom = (unsigned char*) malloc(h1.tailleNomB0 * sizeof(unsigned char));
+        h1.donnees = (unsigned char*) malloc(h1.tailleDonneesB0 * sizeof(unsigned char));
+
+        memcpy(h1.nom, tag1_complet, h1.tailleNomB0);
+        memcpy(h1.donnees, valeur1_def, h1.tailleDonneesB0);
+
+        h1.tailleNomB0 = htons(h1.tailleNomB0);
+        h1.tailleDonneesB0 = htons(h1.tailleDonneesB0);
+
+        //free(tag1_complet);
+        //free(valeur1_def);
 
         headers_http[i] = h1;
 
@@ -344,21 +450,27 @@ nameValuePair* ecrire_fcgi_header(int* nb_fcgi_headers)
         h3.tailleNomB0 = strlen("QUERY_STRING");
         h3.tailleDonneesB0 = strlen(queryString) +1;
 
-        h3.nom = malloc(h3.tailleNomB0 * sizeof(char));
-        h3.donnees = malloc(h3.tailleDonneesB0 * sizeof(char));
+        h3.nom = malloc(h3.tailleNomB0 * sizeof(unsigned char));
+        h3.donnees = malloc(h3.tailleDonneesB0 * sizeof(unsigned char));
 
-        memcpy(h3.nom,"QUERY_STRING",h3.tailleNomB0);
+        memcpy(h3.nom,"QUERY_STRING", h3.tailleNomB0);
         memcpy(h3.donnees, queryString, h3.tailleDonneesB0);
+
+        h3.tailleNomB0 = htons(h3.tailleNomB0);
+        h3.tailleDonneesB0 = htons(h3.tailleDonneesB0);
     }
     else{
         h3.tailleNomB0 = strlen("QUERY_STRING");
         h3.tailleDonneesB0 = 1;
 
-        h3.nom = malloc(h3.tailleNomB0 * sizeof(char));
-        h3.donnees = malloc(sizeof(char));
+        h3.nom = malloc(h3.tailleNomB0 * sizeof(unsigned char));
+        h3.donnees = malloc(sizeof(unsigned char));
 
         memcpy(h3.nom, "QUERY_STRING", h3.tailleNomB0);
         memcpy(h3.donnees, "", 1);
+
+        h3.tailleNomB0 = htons(h3.tailleNomB0);
+        h3.tailleDonneesB0 = htons(h3.tailleDonneesB0);
     }
     
 // Cherche le SCRIPT_FILENAME en decomposant la request-target (va de /.../.../ jusqu'a ce que le prochain token soit nul)
@@ -398,6 +510,9 @@ nameValuePair* ecrire_fcgi_header(int* nb_fcgi_headers)
     memcpy(h1.nom, "SCRIPT_FILENAME", h1.tailleNomB0);
     memcpy(h1.donnees, script_filename_def, h1.tailleDonneesB0);
 
+    h1.tailleNomB0 = htons(h1.tailleNomB0);
+    h1.tailleDonneesB0 = htons(h1.tailleDonneesB0);
+
 // nameValue pair about request method
     h2.tailleNomB0 = strlen("REQUEST_METHOD");
     h2.tailleDonneesB0 = strlen(methode) +1;
@@ -408,6 +523,9 @@ nameValuePair* ecrire_fcgi_header(int* nb_fcgi_headers)
     memcpy(h2.nom, "REQUEST_METHOD", h2.tailleNomB0);
     memcpy(h2.donnees, methode, h2.tailleDonneesB0);
 
+    h2.tailleNomB0 = htons(h2.tailleNomB0);
+    h2.tailleDonneesB0 = htons(h2.tailleDonneesB0);
+
 // nameValue pair about requestURI
     h4.tailleNomB0 = strlen("REQUEST_URI");
     h4.tailleDonneesB0 = strlen(requestURI) +1;
@@ -417,6 +535,13 @@ nameValuePair* ecrire_fcgi_header(int* nb_fcgi_headers)
 
     memcpy(h4.nom, "REQUEST_URI", h4.tailleNomB0);
     memcpy(h4.donnees, requestURI, h4.tailleDonneesB0);
+
+    h4.tailleNomB0 = htons(h4.tailleNomB0);
+    h4.tailleDonneesB0 = htons(h4.tailleDonneesB0);
+
+    //free(current);
+    //free(scriptname);
+    //free(script_filename_def);
 
     reponse[0] = h1;
     reponse[1] = h2;
@@ -440,7 +565,7 @@ void createRequeteParams(int fd)
     header->version = FCGI_VERSION_1;
     header->requestId = htons(requestId);
     header->paddingLength = 0;
-    header->reserved = 0;
+    header->reserved = htons(0);
     
 
 // Recuperation des headers HTTP & FCGI
@@ -461,17 +586,27 @@ void createRequeteParams(int fd)
     
     header->contentLength = taille_fcgi_headers + taille_http_headers;
 
+
+    for (int i = 0; i < nb_http_headers; i++) {
+        memcpy(header->contentData + i*sizeof(nameValuePair), &(http_headers[i]), sizeof(nameValuePair));
+    }
+
+    for (int j = 0; j < nb_fcgi_headers; j++) {
+        memcpy(header->contentData + taille_http_headers + j*sizeof(nameValuePair), &(fcgi_headers[j]), sizeof(nameValuePair));
+    }
+
 // On rentre les 2 types de headers dans le contentData du FCGI-message
-    memcpy(header->contentData, http_headers, taille_http_headers);
-    memcpy(header->contentData +taille_http_headers, fcgi_headers, taille_fcgi_headers);
+    //memcpy(header->contentData, http_headers, taille_http_headers);
+    //memcpy(header->contentData +taille_http_headers, fcgi_headers, taille_fcgi_headers);
+
 
     header->contentLength = htons(header->contentLength);
     header->paddingLength = htons(header->paddingLength);
 
-    write(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
+    write(fd, header, FCGI_HEADER_SIZE + ntohs(header->contentLength) + ntohs(header->paddingLength));
 
 // Une fois envoye plus besoin du header
-    free(header);
+    //free(header);
 }
 
 void createEmptyParams(int fd)
@@ -491,7 +626,7 @@ void createEmptyParams(int fd)
     header->contentLength = htons(header->contentLength);
     header->paddingLength = htons(header->paddingLength);
 
-    write(fd, header, FCGI_HEADER_SIZE + (header->contentLength) + (header->paddingLength));
+    write(fd, header, FCGI_HEADER_SIZE + ntohs(header->contentLength) + ntohs(header->paddingLength));
 
     free(header);
 }
