@@ -10,6 +10,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <magic.h>
@@ -98,7 +101,7 @@ int main(int argc, char *argv[])
         int f_size;                                                                           // Taille de la ressource envoyee en octet (= file_stat.st_size)
         char *f_type;                                                                         // String contenant le(s) type(s) du/des fichier(s) renvoye(s) en reponse
         char *host_filter;                                                                    // String contenant le host sans prefixe (e.g. www.) et sans suffixe (e.g. .fr)
-        FILE* f_descripteur;
+        int f_descripteur;
         magic_t file_magic = magic_open(MAGIC_MIME);                                          // Ouvre le cookie qui servira a determiner le type du fichier requete
         magic_load(file_magic, NULL);                                                         // Charge le cookie, maintenant pret a etre utilise !
 
@@ -272,8 +275,15 @@ int main(int argc, char *argv[])
 
                         /* TRAITEMENT DU HOST */
                         host = getElementValue(token->node, &len_host);
-                        host_filter = strtok(host, ".");
-                        host_filter = strtok(NULL, "."); // Obtient tout ce qui est apres le prefixe (e.g. "www.")
+
+                    // Uniquement pour les tests internes : a la place de faire du nc -C 127.0.0.1 8080 :)
+                        if (strstr(host, "127.0.0.1") != NULL) {
+                            host_filter = ".";
+                        } else {
+                            host_filter = strtok(host, ".");
+                            host_filter = strtok(NULL, "."); // Obtient tout ce qui est apres le prefixe (e.g. "www.")
+                        }
+
                     }
                     // En version HTTP/1.1, le champs Host-header est le seul a etre obligatoirement present
                     else if (flag_v1_1 && token == NULL)
@@ -305,7 +315,6 @@ int main(int argc, char *argv[])
 
                     // /!\ ATTENTION : LA VARIABLE $LD_LIBRARY_PATH S'EST RAJOUTEE AU DEBUT DE path_request_target !!!
                     strcat(path_request_target, request_target);
-
 
                     // Traitement de la request-target...
                     //... d'abord on s'assure qu'on ne demande pas la racine (on n'accepte pas les repertoires, uniquements les fichiers reguliers)
@@ -536,16 +545,16 @@ int main(int argc, char *argv[])
                 // Check des caracteristiques en lecture du fichier voulu
                 f_size = file_stat.st_size;
                 char *lecture = (char *) malloc(f_size * sizeof(char));
-                f_descripteur = fopen(path_request_target, "r");
+                f_descripteur = open(path_request_target, O_RDONLY);
                 ssize_t nb_lu = read(f_descripteur, lecture, f_size);
 
                 if (nb_lu < f_size)
                 { // f_size exprime la quantite en octets, nb_lu exprime la quantite en nombre d'objets lu
                     lecture = realloc(lecture, nb_lu * sizeof(char));
-                    f_size = nb_lu * sizeof(char);
+                    f_size = nb_lu;
                 }
 
-                fclose(f_descripteur);
+                close(f_descripteur);
 
                 char *date;
                 effectueDatation(&date);                
@@ -591,6 +600,9 @@ int main(int argc, char *argv[])
                 // Ecriture / Envoie du body-message
                     writeDirectClient(requete->clientId, lecture, nb_lu);
                 }
+
+                free(lecture);
+
                 break;
             }
         }
